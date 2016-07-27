@@ -4,21 +4,12 @@
  <title>奔跑的蚂蚁</title>
  <link href="http://wangtaox.github.io/atom.xml" rel="self"/>
  <link href="http://wangtaox.github.io"/>
- <updated>2016-07-27T21:21:31+08:00</updated>
+ <updated>2016-07-27T21:26:16+08:00</updated>
  <id>http://wangtaox.github.io/</id>
  <author>
    <name>TaoWang</name>
  </author>
 
- 
- <entry>
-   <title>flannel vxlan implementation</title>
-   <link href="http://wangtaox.github.io/2016/07/27/flannel-vxlan-internal.html"/>
-   <updated>2016-07-27T00:00:00+08:00</updated>
-   <id>http://wangtaox.github.io/2016/07/27/flannel-vxlan-internal</id>
-   <content type="html">&lt;h3&gt;flannel&lt;/h3&gt;
-</content>
- </entry>
  
  <entry>
    <title>&quot;CSS secrets&quot; Reading Notes</title>
@@ -649,6 +640,15 @@ service chatservice {
 &lt;li&gt;&lt;a href=&quot;https://github.com/gengo/grpc-gateway&quot;&gt;gRPC rest gateway&lt;/a&gt;&lt;/li&gt;
 &lt;/ul&gt;
 
+</content>
+ </entry>
+ 
+ <entry>
+   <title>flannel vxlan implementation</title>
+   <link href="http://wangtaox.github.io/2016/01/01/flannel-vxlan.html"/>
+   <updated>2016-01-01T00:00:00+08:00</updated>
+   <id>http://wangtaox.github.io/2016/01/01/flannel-vxlan</id>
+   <content type="html">&lt;h3&gt;flannel&lt;/h3&gt;
 </content>
  </entry>
  
