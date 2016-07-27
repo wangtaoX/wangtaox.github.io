@@ -4,7 +4,7 @@
  <title>奔跑的蚂蚁</title>
  <link href="http://wangtaox.github.io/atom.xml" rel="self"/>
  <link href="http://wangtaox.github.io"/>
- <updated>2016-07-27T21:26:16+08:00</updated>
+ <updated>2016-07-27T21:30:59+08:00</updated>
  <id>http://wangtaox.github.io/</id>
  <author>
    <name>TaoWang</name>
@@ -492,9 +492,7 @@ result.then(() =&amp;gt; {
    <link href="http://wangtaox.github.io/2016/02/01/grpc.html"/>
    <updated>2016-02-01T00:00:00+08:00</updated>
    <id>http://wangtaox.github.io/2016/02/01/grpc</id>
-   <content type="html">&lt;p&gt;使用gRPC构建文件传输服务&lt;/p&gt;
-
-&lt;h3&gt;grpc简介&lt;/h3&gt;
+   <content type="html">&lt;h3&gt;grpc简介&lt;/h3&gt;
 
 &lt;p&gt;&lt;a href=&quot;http://www.grpc.io/&quot;&gt;grpc&lt;/a&gt;是Google开源的rpc框架，使用&lt;a href=&quot;https://developers.google.com/protocol-buffers/&quot;&gt;protobuf&lt;/a&gt;进行数据编码，，基于Http2协议，提供了很多优势，比如:双向的数据流，流控制，包头压缩，多路复用等，详细信息可以参考grpc官网。&lt;/p&gt;
 
