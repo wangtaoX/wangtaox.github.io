@@ -38,117 +38,154 @@
   
   <article class="content">
     <section class="title">
-      <h2><a href="/2016/05/14/css-secret-reading-notes.html">"CSS secrets" Reading Notes</a></h2>
+      <h2><a href="/2016/07/29/flannel-vxlan.html">flannel vxlan implementation</a></h2>
     </section>
     <section class="meta">
       <span class="time">
-        <time datetime="2016-05-14">2016-05-14</time>
+        <time datetime="2016-07-29">2016-07-29</time>
       </span>
       
       <span class="tags">
         
-        <a href="/tags.html#css" title="css">#css</a>
+        <a href="/tags.html#vxlan" title="vxlan">#vxlan</a>
+        
+        <a href="/tags.html#docker" title="docker">#docker</a>
+        
+        <a href="/tags.html#flannel" title="flannel">#flannel</a>
         
       </span>
     
     </section>
     <section class="post">
-     <h3>currentColor</h3>
+     <p>flannel是<a href="https://coreos.com/">coreos</a>为<a href="http://kubernetes.io/">kubernets</a>提供的网络解决方案，主要为打通跨节点的容器通信，其中vxlan模式为flannel实现的一种后端模式，其他模式还包括<strong>udp</strong>,
+<strong>host-gw</strong>等，可以通过<a href="https://github.com/coreos/flannel">flannel</a>官网了解更多信息。</p>
 
-<p>In css3, we got a special new color keyword <strong>currentColor</strong>, which always resolves to the value of the <strong>color</strong> property, make it <strong>the first ever variable</strong> in css.</p>
+<h3>linux vxlan工作原理</h3>
 
-<pre><code class="CSS">.dont-do-this {
-  height: 2em;
-  width: 1em;
-  background: currentColor;
-}
-</code></pre>
+<p>flannel的vxlan模式使用的是原生的linux vxlan实现，因此了解linux vxlan工作原理对于理解flannel的代码实现很有帮助。</p>
 
-<p>It will become even more useful when we get functions to manipulate colors in native css.</p>
-
-<h3>Use shorthands wisely</h3>
-
-<pre><code class="CSS">.positive-bg {
-  background: blue;
-  /*background-color: blue;*/
-}
-</code></pre>
-
-<p>It is good defensive coding and future-proofing to use them, unless we intentionally want to use cascaded properties.</p>
-
-<h3>background-clip</h3>
-
-<pre><code class="CSS">.photo-box {
-  border: .4em solid rgba(255, 255, 255, .5);
-  border-radius: .4em;
-  font-size: 120%;
-  line-height: 1.5;
-  width: 720px;
-  background: rgba(255, 255, 255);
-  background-clip: padding-box;
-}
-</code></pre>
-
-<h3>outline</h3>
-
-<p><strong>outline</strong> do not fellow the elements’s rounding but <strong>box-shadow</strong> do</p>
-
-<pre><code class="css">.box {
-  background: blue;
-  border-radius: .8em;
-  padding: 1em;
-  box-shadow: 0 0 0 .8em red;
-  outline: .8em solid red;
-}
-</code></pre>
-
-<h3>linear-gradient</h3>
-
-<pre><code class="css">.bg {
-  background: linear-gradient(red 20%, blue 80%);
-  ....
-  /* 80% － 20% is the length of gradient area */
-}
-</code></pre>
-
-<p>If we set the color position at 0, it means its position is set to where the previous one stop.</p>
-
-<h3>box-shadow</h3>
-
-<pre><code class="css">.box {
-  box-shadow: 0 0 10px blue;
-}
-</code></pre>
-
-<h3>z-index</h3>
-
-<p>First of all, z-index only works on positioned elements. If you try to set a z-index on an element with no position specified, it will do nothing. Secondly, z-index values can create stacking contexts.</p>
-
-<p>Every stacking context has a single HTML element as its root element. When a new stacking context is formed on an element, that stacking context confines all of its child elements to a particular place in the stacking order, That means that if an element is contained in a stacking context at the bottom of the stacking order, there is no way to get it to appear in front of another element in a different stacking context that is higher in the stacking order, even with a z-index of a billion!</p>
-
-<p>New stacking contexts can be formed on an element in one of three ways:</p>
+<p>在linux vxlan中，主要术语:</p>
 
 <ul>
-<li>When an element is the root element of a document (the <strong>html</strong> element)</li>
-<li>When an element has a position value other than static and a z-index value other than auto</li>
-<li>When an element has an opacity value less than 1</li>
+<li>L3 Miss: 目标IP在邻居表中未找到 (IP Miss，所以才叫L3 Miss吗？)</li>
+<li>L2 Miss: 目标MAC在vxlan FDB中未找到对应项 (2层的Miss)</li>
+<li>NOLEARNING: 禁止洪泛数据包 (在FDB中未找到相应表项)</li>
 </ul>
 
 
-<p>In addition to opacity, several newer CSS properties also create stacking contexts. These include: transforms, filters, css-regions, paged media, and possibly others. As a general rule, it seems that if a CSS property requires rendering in an offscreen context, it must create a new stacking context.</p>
+<p><strong>vxlan fdb</strong> 主要映射目标MAC到vtep IP。</p>
 
-<p>Here are the basic rules to determine stacking order within a single stacking context (from back to front):</p>
+<p>如图 <img src="/media/files/2016/08/01/linux_vxlan.svg" alt="flannel-ovs" /></p>
+
+<pre><code class="shell">创建vxlan device
+$ip link add vxlan0 type vxlan id 42 group 239.1.1.1 dev eth0
+$ip link set vxlan0 address 54:8:20:0:0:A
+$ip address add 10.10.10.1 dev vxlan0
+$ip link set up vxlan0
+</code></pre>
+
+<p>host－A 10.10.10.1 ping host-B 10.10.11.1</p>
+
+<pre><code class="shell">Host-A $ping 10.10.11.1
+</code></pre>
 
 <ol>
-<li>The stacking context’s root element</li>
-<li>Positioned elements (and their children) with negative z-index values (higher values are stacked in front of lower values; elements with the same value are stacked according to appearance in the HTML)</li>
-<li>Non-positioned elements (ordered by appearance in the HTML)</li>
-<li>Positioned elements (and their children) with a z-index value of auto (ordered by appearance in the HTML)</li>
-<li>Positioned elements (and their children) with positive z-index values (higher values are stacked in front of lower values; elements with the same value are stacked according to appearance in the HTML)</li>
+<li>host-A vxlan0接口生成arp请求10.10.11.1的mac地址</li>
+<li>vxlan 驱动封装添加VNI header，没有已知的目的mac，使用多播地址</li>
+<li>eth0 发出数据包</li>
 </ol>
 
 
-<p>Note: positioned elements with negative z-indexes are ordered first within a stacking context, which means they appear behind all other elements. Because of this, it becomes possible for an element to appear behind its own parent, which is normally not possible. This will only work if the element’s parent is in the same stacking context and is not the root element of that stacking context.</p>
+<p>在host－B上，</p>
+
+<ol>
+<li>host－B收到数据包然后转发给相应的udp端口(vxlan)</li>
+<li>vxlan驱动解封装，vxlan0接收到arp request包，并生成相应的arp reply包，添加相应的vxlan header，目的mac为56:bb:01:0f:cb:A</li>
+</ol>
+
+
+<p>这样在host-B的fdb中，会学到56:bb:01:0f:cb:A到转发规则，如下:</p>
+
+<pre><code class="shell">Host-B $bridge fdb show dev vxlan0
+56:bb:01:0f:cb:A dev vxlan0 dst 192.168.1.10 self
+0:0:0:0:0:0 dev vxlan0 dst 239.1.1.1 via eth0 self permanent
+</code></pre>
+
+<p>第二条规则就是在目的mac为止时使用多播地址的相应规则。</p>
+
+<h3>flannel实现方式</h3>
+
+<p>因为flannel是为k8s提供的网络解决方案，而在k8s中，每一台host会分配一个网段，该网段所有启动的容器均在这台机器上，所以，对于flnanel来说，很多信息都是已知的，可以简化flannel的vxlan fdb(不需要处理未知的MAC地址情况)以及相应的代码实现。</p>
+
+<p>在flannel中，flannel会在每一台启动了flannel agentd的机器上创建一个vxlan device(上述的vxlan0)，名称是flannel.1(1为vni号)，flannel agent会根据分配的网段信息和vxlan device信息(vxlan device的mac地址)，动态的修改host上的邻居表，并结合vxlan device的fdb实现跨主机的docker容器的通信。</p>
+
+<h4>一个例子</h4>
+
+<p>flannel的网段分配信息是通过etcd 记录的，在etcd中设置相应信息:</p>
+
+<pre><code class="shell">etcd $etcdctl get /flannel/network/config
+{ "Network": "10.10.0.0/16", "Backend": { "Type": "vxlan", "VNI": 1 } }
+</code></pre>
+
+<p>在host-A上运行flannel agent，agent在etcd中分配网段10.10.10.0/24，agent创建flannel.1设备接口，配置IP 10.10.10.0 MAC 56:bb:01:0f:cb:A，配置路由，整个大段通过flannel.1, 这样overlay网络流量通过flannel.1转发处理，然后启动docker0，通过指定bip 10.10.10.1/24启动，这样在host-A上的容器使用网段10.10.10.1/24。</p>
+
+<p>同理在host-B上运行flannel agent，agent进行的相应配置过程类似。</p>
+
+<p>整个例子如图<img src="/media/files/2016/08/01/flannel-vxlan.svg" alt="flannel-vxlan" /></p>
+
+<h4>flannel vxlan相应工作流程</h4>
+
+<p>由于flannel agentd知道所有的网段分配信息以及每台host上的flannel.1设备的IP，MAC，因此每一个网段在进行vxlan fdb转发时，可以使用host上flannel.1的MAC地址。</p>
+
+<p>在host-A上，运行</p>
+
+<pre><code>host-A# bridge fdb show dev flannel.1
+56:bb:01:0f:cb:B dst 192.168.1.11 self permanent
+</code></pre>
+
+<p>在host－B上，运行</p>
+
+<pre><code>host-B# bridge fdb show dev flannel.1
+56:bb:01:0f:cb:A dst 192.168.1.10 self permanent
+</code></pre>
+
+<p>如图c1 ping c2时，如果容器c1 IP(10.10.10.2), 容器c2 IP(10.10.11.2),
+因为host－A 的邻居表里没有c2 IP到MAC表项，flannel agent会收到相应的l3 miss(netlink)消息，然后flannel agent会反应式的设置c2 的IP到MAC表项为10.10.11.2-56:bb:01:0f:cb:B，这样在fdb中MAC 56:bb:01:0f:cb:B就对应到host-B的flannel.1。</p>
+
+<p>因为flannel知道必要的网络信息，所以flannel直接按段处理了L3 miss的消息，L2的fdb直接在启动时根据etcd信息静态配置好，这样整个网络就连通了。</p>
+
+<h4>L3 miss代码</h4>
+
+<p>如代码，在L3 miss代码中，通过miss的IP在所有段里匹配然后设置对应的vtepMac，即:
+上述的c2 IP是对应到网段10.10.11.0/24的，然后相应的vtepMAC就对应到host-B的flannel.1的MAC，代码中是通过路由信息记录的，也保存了设备的MAC。</p>
+
+<pre><code class="golang">func (n *network) handleL3Miss(miss *netlink.Neigh) {
+    log.Infof("L3 miss: %v", miss.IP)
+
+    rt := n.rts.findByNetwork(ip.FromIP(miss.IP))
+    if rt == nil {
+        log.Infof("Route for %v not found", miss.IP)
+        return
+    }
+
+    if err := n.dev.AddL3(neigh{IP: ip.FromIP(miss.IP), MAC: rt.vtepMAC}); err != nil {
+        log.Errorf("AddL3 failed: %v", err)
+    } else {
+        log.Info("AddL3 succeeded")
+    }
+}
+</code></pre>
+
+<p>L2的代码也可以在该函数<a href="https://github.com/coreos/flannel/blob/master/backend/vxlan/network.go">所在文件</a>中找到。</p>
+
+<h4>参考资料</h4>
+
+<ol>
+<li><a href="http://events.linuxfoundation.org/sites/events/files/slides/2013-linuxcon.pdf">http://events.linuxfoundation.org/sites/events/files/slides/2013-linuxcon.pdf</a></li>
+<li><a href="http://lartc.org/howto/lartc.kernel.obscure.html">http://lartc.org/howto/lartc.kernel.obscure.html</a></li>
+<li><a href="http://hustcat.github.io/vxlan-l3miss-problem/">http://hustcat.github.io/vxlan-l3miss-problem/</a></li>
+</ol>
+
 
     </section>
   </article>
