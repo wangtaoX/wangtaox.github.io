@@ -4,7 +4,7 @@
  <title>奔跑的蚂蚁</title>
  <link href="http://wangtaox.github.io/atom.xml" rel="self"/>
  <link href="http://wangtaox.github.io"/>
- <updated>2016-07-27T21:30:59+08:00</updated>
+ <updated>2016-08-01T16:59:05+08:00</updated>
  <id>http://wangtaox.github.io/</id>
  <author>
    <name>TaoWang</name>
@@ -642,11 +642,185 @@ service chatservice {
  </entry>
  
  <entry>
+   <title>max-width和width</title>
+   <link href="http://wangtaox.github.io/2016/01/10/max-width-and-width.html"/>
+   <updated>2016-01-10T00:00:00+08:00</updated>
+   <id>http://wangtaox.github.io/2016/01/10/max-width-and-width</id>
+   <content type="html">&lt;p&gt;以下max-width及width使用方式区别:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;css&quot;&gt;.modal-one {
+    ...
+    width: 800px;
+    max-width: 100%;
+}
+
+or
+
+.modal-two {
+    ...
+    width: 100%;
+    max-width: 800px;
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h4&gt;Scenario 1: parent is wider than 800px&lt;/h4&gt;
+
+&lt;p&gt;parent is 1000px wide&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;&lt;code&gt;.modal-one&lt;/code&gt; 显示width为800px, max-width为1000px, width未超过max-width, 则width最终为800px&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;.modal-two&lt;/code&gt; 显示width为1000px, max-width为800px, width超过了max-width, 则width最终为800px&lt;/li&gt;
+&lt;/ol&gt;
+
+
+&lt;h4&gt;Scenario 2: parent is smaller than 800px&lt;/h4&gt;
+
+&lt;p&gt;parent is 460px wide&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;&lt;code&gt;.modal-one&lt;/code&gt; 显示width为800px, max-width为460px, width超过max-width, 则width最终为460px&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;.modal-two&lt;/code&gt; 显示width为460px, max-width为800px, width未超过max-width, 则width最终为460px&lt;/li&gt;
+&lt;/ol&gt;
+
+
+&lt;p&gt;因此, 一个元素如果width大于max-width, max-width是高于width的。&lt;/p&gt;
+</content>
+ </entry>
+ 
+ <entry>
    <title>flannel vxlan implementation</title>
    <link href="http://wangtaox.github.io/2016/01/01/flannel-vxlan.html"/>
    <updated>2016-01-01T00:00:00+08:00</updated>
    <id>http://wangtaox.github.io/2016/01/01/flannel-vxlan</id>
-   <content type="html">&lt;h3&gt;flannel&lt;/h3&gt;
+   <content type="html">&lt;p&gt;flannel是&lt;a href=&quot;https://coreos.com/&quot;&gt;coreos&lt;/a&gt;为&lt;a href=&quot;http://kubernetes.io/&quot;&gt;kubernets&lt;/a&gt;提供的网络解决方案，主要为打通跨节点的容器通信，其中vxlan模式为flannel实现的一种后端模式，其他模式还包括&lt;strong&gt;udp&lt;/strong&gt;,
+&lt;strong&gt;host-gw&lt;/strong&gt;等，可以通过&lt;a href=&quot;https://github.com/coreos/flannel&quot;&gt;flannel&lt;/a&gt;官网了解更多信息。&lt;/p&gt;
+
+&lt;h3&gt;linux vxlan工作原理&lt;/h3&gt;
+
+&lt;p&gt;flannel的vxlan模式使用的是原生的linux vxlan实现，因此了解linux vxlan工作原理对于理解flannel的代码实现很有帮助。&lt;/p&gt;
+
+&lt;p&gt;在linux vxlan中，主要术语:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;L3 Miss: 目标IP在邻居表中未找到 (IP Miss，所以才叫L3 Miss吗？)&lt;/li&gt;
+&lt;li&gt;L2 Miss: 目标MAC在vxlan FDB中未找到对应项 (2层的Miss)&lt;/li&gt;
+&lt;li&gt;NOLEARNING: 禁止洪泛数据包 (在FDB中未找到相应表项)&lt;/li&gt;
+&lt;/ul&gt;
+
+
+&lt;p&gt;&lt;strong&gt;vxlan fdb&lt;/strong&gt; 主要映射目标MAC到vtep IP。&lt;/p&gt;
+
+&lt;p&gt;如图 &lt;img src=&quot;/media/files/2016/08/01/linux_vxlan.svg&quot; alt=&quot;flannel-ovs&quot; /&gt;&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;shell&quot;&gt;创建vxlan device
+$ip link add vxlan0 type vxlan id 42 group 239.1.1.1 dev eth0
+$ip link set vxlan0 address 54:8:20:0:0:A
+$ip address add 10.10.10.1 dev vxlan0
+$ip link set up vxlan0
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;host－A 10.10.10.1 ping host-B 10.10.11.1&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;shell&quot;&gt;Host-A $ping 10.10.11.1
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;ol&gt;
+&lt;li&gt;host-A vxlan0接口生成arp请求10.10.11.1的mac地址&lt;/li&gt;
+&lt;li&gt;vxlan 驱动封装添加VNI header，没有已知的目的mac，使用多播地址&lt;/li&gt;
+&lt;li&gt;eth0 发出数据包&lt;/li&gt;
+&lt;/ol&gt;
+
+
+&lt;p&gt;在host－B上，&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;host－B收到数据包然后转发给相应的udp端口(vxlan)&lt;/li&gt;
+&lt;li&gt;vxlan驱动解封装，vxlan0接收到arp request包，并生成相应的arp reply包，添加相应的vxlan header，目的mac为56:bb:01:0f:cb:A&lt;/li&gt;
+&lt;/ol&gt;
+
+
+&lt;p&gt;这样在host-B的fdb中，会学到56:bb:01:0f:cb:A到转发规则，如下:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;shell&quot;&gt;Host-B $bridge fdb show dev vxlan0
+56:bb:01:0f:cb:A dev vxlan0 dst 192.168.1.10 self
+0:0:0:0:0:0 dev vxlan0 dst 239.1.1.1 via eth0 self permanent
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;第二条规则就是在目的mac为止时使用多播地址的相应规则。&lt;/p&gt;
+
+&lt;h3&gt;flannel实现方式&lt;/h3&gt;
+
+&lt;p&gt;因为flannel是为k8s提供的网络解决方案，而在k8s中，每一台host会分配一个网段，该网段所有启动的容器均在这台机器上，所以，对于flnanel来说，很多信息都是已知的，可以简化flannel的vxlan fdb(不需要处理未知的MAC地址情况)以及相应的代码实现。&lt;/p&gt;
+
+&lt;p&gt;在flannel中，flannel会在每一台启动了flannel agentd的机器上创建一个vxlan device(上述的vxlan0)，名称是flannel.1(1为vni号)，flannel agent会根据分配的网段信息和vxlan device信息(vxlan device的mac地址)，动态的修改host上的邻居表，并结合vxlan device的fdb实现跨主机的docker容器的通信。&lt;/p&gt;
+
+&lt;h4&gt;一个例子&lt;/h4&gt;
+
+&lt;p&gt;flannel的网段分配信息是通过etcd 记录的，在etcd中设置相应信息:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;shell&quot;&gt;etcd $etcdctl get /flannel/network/config
+{ &quot;Network&quot;: &quot;10.10.0.0/16&quot;, &quot;Backend&quot;: { &quot;Type&quot;: &quot;vxlan&quot;, &quot;VNI&quot;: 1 } }
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;在host-A上运行flannel agent，agent在etcd中分配网段10.10.10.0/24，agent创建flannel.1设备接口，配置IP 10.10.10.0 MAC 56:bb:01:0f:cb:A，配置路由，整个大段通过flannel.1, 这样overlay网络流量通过flannel.1转发处理，然后启动docker0，通过指定bip 10.10.10.1/24启动，这样在host-A上的容器使用网段10.10.10.1/24。&lt;/p&gt;
+
+&lt;p&gt;同理在host-B上运行flannel agent，agent进行的相应配置过程类似。&lt;/p&gt;
+
+&lt;p&gt;整个例子如图&lt;img src=&quot;/media/files/2016/08/01/flannel-vxlan.svg&quot; alt=&quot;flannel-vxlan&quot; /&gt;&lt;/p&gt;
+
+&lt;h4&gt;flannel vxlan相应工作流程&lt;/h4&gt;
+
+&lt;p&gt;由于flannel agentd知道所有的网段分配信息以及每台host上的flannel.1设备的IP，MAC，因此每一个网段在进行vxlan fdb转发时，可以使用host上flannel.1的MAC地址。&lt;/p&gt;
+
+&lt;p&gt;在host-A上，运行&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;host-A# bridge fdb show dev flannel.1
+56:bb:01:0f:cb:B dst 192.168.1.11 self permanent
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;在host－B上，运行&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;host-B# bridge fdb show dev flannel.1
+56:bb:01:0f:cb:A dst 192.168.1.10 self permanent
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;如图c1 ping c2时，如果容器c1 IP(10.10.10.2), 容器c2 IP(10.10.11.2),
+因为host－A 的邻居表里没有c2 IP到MAC表项，flannel agent会收到相应的l3 miss(netlink)消息，然后flannel agent会反应式的设置c2 的IP到MAC表项为10.10.11.2-56:bb:01:0f:cb:B，这样在fdb中MAC 56:bb:01:0f:cb:B就对应到host-B的flannel.1。&lt;/p&gt;
+
+&lt;p&gt;因为flannel知道必要的网络信息，所以flannel直接按段处理了L3 miss的消息，L2的fdb直接在启动时根据etcd信息静态配置好，这样整个网络就连通了。&lt;/p&gt;
+
+&lt;h4&gt;L3 miss代码&lt;/h4&gt;
+
+&lt;p&gt;如代码，在L3 miss代码中，通过miss的IP在所有段里匹配然后设置对应的vtepMac，即:
+上述的c2 IP是对应到网段10.10.11.0/24的，然后相应的vtepMAC就对应到host-B的flannel.1的MAC，代码中是通过路由信息记录的，也保存了设备的MAC。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;golang&quot;&gt;func (n *network) handleL3Miss(miss *netlink.Neigh) {
+    log.Infof(&quot;L3 miss: %v&quot;, miss.IP)
+
+    rt := n.rts.findByNetwork(ip.FromIP(miss.IP))
+    if rt == nil {
+        log.Infof(&quot;Route for %v not found&quot;, miss.IP)
+        return
+    }
+
+    if err := n.dev.AddL3(neigh{IP: ip.FromIP(miss.IP), MAC: rt.vtepMAC}); err != nil {
+        log.Errorf(&quot;AddL3 failed: %v&quot;, err)
+    } else {
+        log.Info(&quot;AddL3 succeeded&quot;)
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;L2的代码也可以在该函数&lt;a href=&quot;https://github.com/coreos/flannel/blob/master/backend/vxlan/network.go&quot;&gt;所在文件&lt;/a&gt;中找到。&lt;/p&gt;
+
+&lt;h4&gt;参考资料&lt;/h4&gt;
+
+&lt;ol&gt;
+&lt;li&gt;&lt;a href=&quot;http://events.linuxfoundation.org/sites/events/files/slides/2013-linuxcon.pdf&quot;&gt;http://events.linuxfoundation.org/sites/events/files/slides/2013-linuxcon.pdf&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;http://lartc.org/howto/lartc.kernel.obscure.html&quot;&gt;http://lartc.org/howto/lartc.kernel.obscure.html&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;http://hustcat.github.io/vxlan-l3miss-problem/&quot;&gt;http://hustcat.github.io/vxlan-l3miss-problem/&lt;/a&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
 </content>
  </entry>
  
