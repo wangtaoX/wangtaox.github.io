@@ -4,7 +4,7 @@
  <title>奔跑的蚂蚁</title>
  <link href="http://wangtaox.github.io/atom.xml" rel="self"/>
  <link href="http://wangtaox.github.io"/>
- <updated>2016-08-04T09:31:53+08:00</updated>
+ <updated>2016-08-04T19:49:40+08:00</updated>
  <id>http://wangtaox.github.io/</id>
  <author>
    <name>TaoWang</name>
@@ -988,10 +988,10 @@ service chatservice {
 &lt;h3&gt;参考链接&lt;/h3&gt;
 
 &lt;ul&gt;
-&lt;li&gt;&lt;a href=&quot;http://talks.golang.org/2015/gotham-grpc.slide#1&quot;&gt;go-grpc-slides&lt;/a&gt;&lt;/li&gt;
-&lt;li&gt;&lt;a href=&quot;https://coreos.com/blog/gRPC-protobufs-swagger.html&quot;&gt;Rest &amp;amp; gRPC&lt;/a&gt;&lt;/li&gt;
-&lt;li&gt;&lt;a href=&quot;https://github.com/coreos/etcd/blob/master/etcdserver/etcdserverpb/rpc.proto&quot;&gt;etcdv3 API proto&lt;/a&gt;&lt;/li&gt;
-&lt;li&gt;&lt;a href=&quot;https://github.com/gengo/grpc-gateway&quot;&gt;gRPC rest gateway&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;http://talks.golang.org/2015/gotham-grpc.slide#1&quot;&gt;http://talks.golang.org/2015/gotham-grpc.slide#1&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://coreos.com/blog/gRPC-protobufs-swagger.html&quot;&gt;https://coreos.com/blog/gRPC-protobufs-swagger.html&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/coreos/etcd/blob/master/etcdserver/etcdserverpb/rpc.proto&quot;&gt;https://github.com/coreos/etcd/blob/master/etcdserver/etcdserverpb/rpc.proto&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/gengo/grpc-gateway&quot;&gt;https://github.com/gengo/grpc-gateway&lt;/a&gt;&lt;/li&gt;
 &lt;/ul&gt;
 
 </content>
