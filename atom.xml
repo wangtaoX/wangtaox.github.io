@@ -4,7 +4,7 @@
  <title>奔跑的蚂蚁</title>
  <link href="http://wangtaox.github.io/atom.xml" rel="self"/>
  <link href="http://wangtaox.github.io"/>
- <updated>2016-08-01T17:04:33+08:00</updated>
+ <updated>2016-08-04T09:31:53+08:00</updated>
  <id>http://wangtaox.github.io/</id>
  <author>
    <name>TaoWang</name>
@@ -667,6 +667,179 @@ result.then(() =&amp;gt; {
 
 &lt;p&gt;promise在使用时一定要注意then回调的返回值，以及组合使用promise，并将操作尽量步骤化，那样可以使用proise链组合出各种需要的
 依赖链并进行调用, 如果给then调用传递非函数值，在then调用中传递的非函数值会被解析为null。&lt;/p&gt;
+</content>
+ </entry>
+ 
+ <entry>
+   <title>React lifecycle hooks notes</title>
+   <link href="http://wangtaox.github.io/2016/02/25/react-lifecycle.html"/>
+   <updated>2016-02-25T14:42:35+08:00</updated>
+   <id>http://wangtaox.github.io/2016/02/25/react-lifecycle</id>
+   <content type="html">&lt;h3&gt;Component Life Cycle Hooks&lt;/h3&gt;
+
+&lt;p&gt;React provides a series of life cycle hooks we can tap into each phase of the life cycle, each of the life cycle hooks are called in specific order and at a specific time.&lt;/p&gt;
+
+&lt;h4&gt;component创建&lt;/h4&gt;
+
+&lt;p&gt;组件的创建主要步骤包括:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;component初始化&lt;/li&gt;
+&lt;li&gt;component.defaultProps获取component的props&lt;/li&gt;
+&lt;li&gt;this.state = ...(ES6的class constructor函数)&lt;/li&gt;
+&lt;li&gt;componentWillMount()函数&lt;/li&gt;
+&lt;li&gt;render()函数&lt;/li&gt;
+&lt;li&gt;子组件的初始化以及生命周期函数&lt;/li&gt;
+&lt;li&gt;componentDidMount()函数&lt;/li&gt;
+&lt;/ol&gt;
+
+
+&lt;p&gt;注意传递props时的null值，比如:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;javascript&quot;&gt;//right
+&amp;lt;Box name={null}&amp;gt; //pass null to props is tricky
+
+//wrong
+&amp;lt;Box name={undefined}&amp;gt;
+
+class Box extends React.Componets {
+  constructor(props) {
+    super(props);
+    this.state = { open: false };
+  }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;注意在constructor函数中需要给state赋值，不然this.state就是undefined了.&lt;/p&gt;
+
+&lt;p&gt;当props和state都设置好后，就会进入第一个生命周期函数componentWillMount，记住在该函数中Dom还未mount，因此访问
+this.refs是不允许的，在该函数中我们可以为调整state或者为第一次render做一些前期工作，比如注册一些全局的事件(window.resize)。&lt;/p&gt;
+
+&lt;p&gt;It&#39;s important to remember that many Native UI elements do not exist at this point in the life cycle. That means we need to stick to very high-level/global events such as window or document.&lt;/p&gt;
+
+&lt;p&gt;在render函数中，我们根据props和state对组件进行渲染，因此，render应该是一个pure function，componentUI = render(props, state)，在render就不应该调用setState函数了，同时也不应该在render中操作DOM.&lt;/p&gt;
+
+&lt;p&gt;有子组件存在时，渲染子组件，类似DFS？&lt;/p&gt;
+
+&lt;p&gt;在componentDidMount函数中，我们可以访问Native UI了，所以在该函数中根据UI进行一些操作时可以的，比如&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;javascript&quot;&gt;componentDidMount() {
+  this.chart = highcharts.Highcharts({
+    elem: this.refs.chart,
+    ...
+  });
+
+  this.table = DataTable.Table({
+    ...
+  });
+
+  $(.css_class).xxx();
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h4&gt;component更新&lt;/h4&gt;
+
+&lt;p&gt;组件的更新主要步骤包括:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;componentWillReceiveProps()函数&lt;/li&gt;
+&lt;li&gt;shouldComponentUpdate()函数&lt;/li&gt;
+&lt;li&gt;render()函数&lt;/li&gt;
+&lt;li&gt;子组件的生命周期函数&lt;/li&gt;
+&lt;li&gt;componentWillUpdate()函数&lt;/li&gt;
+&lt;/ol&gt;
+
+
+&lt;p&gt;componentWillReceiveProps(nextProps)函数会在props传递给component时调用，可以对比props。&lt;/p&gt;
+
+&lt;p&gt;The core issue with props and componentWillReceiveProps() is how JavaScript provides mutable data structures. Let&#39;s say we have a prop called data and data is an Array.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;javascript&quot;&gt;// psuedo code
+this.setState({ data: [1, 2, 3] });
+
+&amp;lt;MyComponent data={ this.state.data } /&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;js中Object时引用的，因此在React中要格外注意。&lt;/p&gt;
+
+&lt;p&gt;The next method in the Update life cycle, is shouldComponentUpdate(). This method allows your Component to exit the Update life cycle if there is no reason to apply a new render. Out of box, the shouldComponentUpdate() is a no-op that returns true. This means every time we start an Update in a Component, we will re-render.
+If you recall, React does not deeply compare props by default. When props or state is updated React assumes we need to re-render the content. But, if the props or state have not changed, should we really be re-rendering?&lt;/p&gt;
+
+&lt;p&gt;Once we have determined that we do need to re-render in our Update phase, the componentWillUpdate() will be called. The method is passed in two arguments: nextProps and nextState. The method componentWillUpdate() is similar to componentWillMount(), and many of the same considerations and tasks are the same. The difference being that componentWillUpdate() is called every time a re-render is required and we get access to the next props and state.&lt;/p&gt;
+
+&lt;p&gt;Just like componentWillMount(), this method is called before render(). Because we have not rendered yet, our Component&#39;s access to the Native UI (DOM, etc.) will reflect the old rendered UI. Unlike, componentWillMount() we can technically access refs but it is not recommended because the refs will also be out of date.+&lt;/p&gt;
+
+&lt;p&gt;The componentWillUpdate() is a chance for us to handle configuration changes, update our state and in general prepare for the next render. If we want to access the old props or state, we can call this.props or this.state. We can then compare them to the new values and make changes/calculations as required.&lt;/p&gt;
+
+&lt;p&gt;Continuing the trend of corresponding methods, the componentDidUpdate() is the Update version of componentDidMount(). Once again, we can access the Native UI stack, interact with our refs and if required start another re-render/update.&lt;/p&gt;
+
+&lt;p&gt;When componentDidUpdate() is called, two arguments are passed: prevProps and prevState. This is the inverse of componentWillUpdate(). The passed values are what the values were and accessing this.props and this.state are the current values&lt;/p&gt;
+
+&lt;p&gt;The most common uses of componentDidUpdate() is managing 3rd party UI elements and interacting with the Native UI. When using 3rd Party libraries, like our Chart example, we need to update the UI library with new data.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;javascript&quot;&gt;componentDidUpdate(prevProps, prevState) {
+  // only update chart of the data has changed
+  if (prevProps.data !== this.props.data) {
+    this.chart = c3.load({
+      data: this.props.data
+    });
+  }
+}
+
+//Another render pass?
+componentDidUpdate(prevProps, prevState) {
+  // One possible fix...
+  let height = ReactDOM.findDOMNode(this).offsetHeight;
+  if (this.state.height !== height ) {
+    this.setState({ internalHeight: height });
+  }
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h4&gt;component挂载&lt;/h4&gt;
+
+&lt;p&gt;组件的卸载和清楚步骤包括:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;componentWillUnmount()&lt;/li&gt;
+&lt;li&gt;子组件生命周期函数&lt;/li&gt;
+&lt;li&gt;component GC&lt;/li&gt;
+&lt;/ol&gt;
+
+
+&lt;p&gt;Just like the rest of our life cycle phases, the Death/Unmount phase has a method hook for us. This method allows us to do some cleanup before we are removed from the UI stack. Typically we want to reverse any setup we did in either componentWillMount() or componentDidMount().&lt;/p&gt;
+
+&lt;p&gt;For example, we would want to unregister any global/system/library events, destroy 3rd party UI library elements, etc. If we don&#39;t take the time to remove events we can create memory leaks in our system or leave bad references laying around.&lt;/p&gt;
+
+&lt;h4&gt;redux&lt;/h4&gt;
+
+&lt;p&gt;redux reducer, 根据action和state得出新的state， (prevState, action) =&gt; newState, 和我们熟悉的Array.prototype.reduce(reducer, prevValue)类似&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;javascript&quot;&gt;let initiaState = { count: 0 }
+
+//counter example
+let actions = [
+    {type: &#39;INC&#39;},
+    {type: &#39;DEC&#39;},
+]
+
+//take actions and state as paramaters, output new state.
+function counterReducer(state = initiaState, action) {
+    switch(action.type) {
+        case &#39;INC&#39;:
+            return Object.assign({}, state, {
+                count: state.count++
+            })
+        case &#39;DEC&#39;:
+            return Object.assign({}, state, {
+                count: state.count--
+            })
+        default:
+            return initiaState
+    }
+}
+console.log(actions.reduce(counterReducer, initiaState))
+&lt;/code&gt;&lt;/pre&gt;
 </content>
  </entry>
  
