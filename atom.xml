@@ -4,12 +4,84 @@
  <title>奔跑的蚂蚁</title>
  <link href="http://wangtaox.github.io/atom.xml" rel="self"/>
  <link href="http://wangtaox.github.io"/>
- <updated>2016-08-04T19:50:32+08:00</updated>
+ <updated>2016-09-02T15:43:42+08:00</updated>
  <id>http://wangtaox.github.io/</id>
  <author>
    <name>TaoWang</name>
  </author>
 
+ 
+ <entry>
+   <title>TCP TIME_WAIT状态与tcp_tw_recycle</title>
+   <link href="http://wangtaox.github.io/2016/09/02/tcp-time-wait.html"/>
+   <updated>2016-09-02T00:00:00+08:00</updated>
+   <id>http://wangtaox.github.io/2016/09/02/tcp-time-wait</id>
+   <content type="html">&lt;p&gt;最近遇到了一个与linux内核选项tcp_tw_recycle的坑, 在此记录一下相关知识点。&lt;/p&gt;
+
+&lt;h3&gt;TIME_WAIT状态的作用&lt;/h3&gt;
+
+&lt;p&gt;如图，TIME_WAIT状态主要用来数据的错误传输，比如一个连接，在断开后，又新建了相同的连接(IP和端口的四元组)，上一次断开的连接中某些数据可能由于网络拥塞而延迟到来，显然延迟的数据不是属于这一个新建的连接的，为了防止这种情况，TIME_WAIT状态会等待2&lt;a href=&quot;https://en.wikipedia.org/wiki/Maximum_segment_lifetime&quot;&gt;MSL&lt;/a&gt;，即两倍最大报文生存时间。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/media/files/2016/09/02/Time_wait.svg&quot; alt=&quot;time_wait&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;如图的黄色箭头所代表的即为不正确的数据。&lt;/p&gt;
+
+&lt;h3&gt;tcp_tw_recycle&lt;/h3&gt;
+
+&lt;p&gt;当在连接量较大的服务器上时，如果大量的TIME_WAIT状态会影响服务器的性能，因此，&lt;a href=&quot;https://tools.ietf.org/html/rfc6191#page-3&quot;&gt;RFC6191&lt;/a&gt;提出使用&lt;a href=&quot;https://en.wikipedia.org/wiki/Transmission_Control_Protocol#TCP_timestamps&quot;&gt;TCP Timestamp&lt;/a&gt;来减少这样的TIME_WAIT状态。&lt;/p&gt;
+
+&lt;p&gt;在内核中的代码实现如下:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;c&quot;&gt;536 bool tcp_peer_is_proven(struct request_sock *req, struct dst_entry *dst, bool paws_check)
+537 {
+538         struct tcp_metrics_block *tm;
+539         bool ret;
+540
+541         if (!dst)
+542                 return false;
+543
+544         rcu_read_lock();
+545         tm = __tcp_get_metrics_req(req, dst);
+546         if (paws_check) {
+547                 if (tm &amp;amp;&amp;amp;
+548                     (u32)get_seconds() - tm-&amp;gt;tcpm_ts_stamp &amp;lt; TCP_PAWS_MSL &amp;amp;&amp;amp;
+549                     (s32)(tm-&amp;gt;tcpm_ts - req-&amp;gt;ts_recent) &amp;gt; TCP_PAWS_WINDOW)
+550                         ret = false;
+551                 else
+552                         ret = true;
+553         } else {
+554                 if (tm &amp;amp;&amp;amp; tcp_metric_get(tm, TCP_METRIC_RTT) &amp;amp;&amp;amp; tm-&amp;gt;tcpm_ts_stamp)
+555                         ret = true;
+556                 else
+557                         ret = false;
+558         }
+559         rcu_read_unlock();
+560
+561         return ret;
+562 }
+563 EXPORT_SYMBOL_GPL(tcp_peer_is_proven);
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;在代码中，547-552行主要确保在TCP_PAWS_MSL时间内请求的时间戳是递增的(TCP_PAWS_WINDOW为1)。&lt;/p&gt;
+
+&lt;h3&gt;ipatbles NAT&lt;/h3&gt;
+
+&lt;p&gt;所以当后端机器在NAT后面时，由于NAT并没有改时间戳，连接中的时间戳来自不同的机器，时间戳(机器启动时间)不一定是递增的，所以就会出现后端机器drop SYN包的情况.&lt;/p&gt;
+
+&lt;p&gt;在NAT后的机器，关闭tcp_tw_recycle检查即可，一般该选项为disable的。&lt;/p&gt;
+
+&lt;h3&gt;参考材料&lt;/h3&gt;
+
+&lt;ol&gt;
+&lt;li&gt;&lt;a href=&quot;http://lxr.free-electrons.com/source/net/ipv4/tcp_metrics.c?v=3.10#L536&quot;&gt;http://lxr.free-electrons.com/source/net/ipv4/tcp_metrics.c?v=3.10#L536&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://tools.ietf.org/html/rfc6191#page-3&quot;&gt;https://tools.ietf.org/html/rfc6191#page-3&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;http://www.isi.edu/touch/pubs/infocomm99/infocomm99-web/&quot;&gt;http://www.isi.edu/touch/pubs/infocomm99/infocomm99-web/&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://vincent.bernat.im/en/blog/2014-tcp-time-wait-state-linux.html#summary&quot;&gt;https://vincent.bernat.im/en/blog/2014-tcp-time-wait-state-linux.html#summary&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://www.ietf.org/rfc/rfc1323.txt&quot;&gt;https://www.ietf.org/rfc/rfc1323.txt&lt;/a&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+</content>
+ </entry>
  
  <entry>
    <title>flannel vxlan implementation</title>
