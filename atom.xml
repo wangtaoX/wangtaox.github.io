@@ -4,7 +4,7 @@
  <title>奔跑的蚂蚁</title>
  <link href="http://wangtaox.github.io/atom.xml" rel="self"/>
  <link href="http://wangtaox.github.io"/>
- <updated>2016-09-27T21:04:07+08:00</updated>
+ <updated>2016-09-27T21:05:07+08:00</updated>
  <id>http://wangtaox.github.io/</id>
  <author>
    <name>TaoWang</name>
@@ -47,13 +47,7 @@ const Enhance = (WrappedComponent) =&amp;gt; class extends Component {
 export default Enhance(MyComponent);
 &lt;/code&gt;&lt;/pre&gt;
 
-&lt;p&gt;如上述代码所示，Enhance(MyComponent)就返回了一个HOC，这个返回的组件封装了MyComponent，因此，HOC可以完成以下一些常用的操作，比如:&lt;/p&gt;
-
-&lt;ul&gt;
-&lt;li&gt;操作props&lt;/li&gt;
-&lt;li&gt;封装通用的样式&lt;/li&gt;
-&lt;/ul&gt;
-
+&lt;p&gt;如上述代码所示，Enhance(MyComponent)就返回了一个HOC，这个返回的组件封装了MyComponent，因此，HOC可以完成以下一些常用的操作，比如: 操作props, 封装通用的样式等&lt;/p&gt;
 
 &lt;h3&gt;操作props&lt;/h3&gt;
 
