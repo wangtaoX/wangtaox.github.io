@@ -4,7 +4,7 @@
  <title>奔跑的蚂蚁</title>
  <link href="http://wangtaox.github.io/atom.xml" rel="self"/>
  <link href="http://wangtaox.github.io"/>
- <updated>2016-09-27T21:02:28+08:00</updated>
+ <updated>2016-09-27T21:04:07+08:00</updated>
  <id>http://wangtaox.github.io/</id>
  <author>
    <name>TaoWang</name>
@@ -94,7 +94,7 @@ export default Enhance(MyComponent);
 &lt;h3&gt;参考材料&lt;/h3&gt;
 
 &lt;ol&gt;
-&lt;li&gt;&lt;a href=&quot;https://medium.com/@housecor/react-stateless-functional-components-nine-wins-you-might-have-overlooked&quot;&gt;https://medium.com/@housecor/react-stateless-functional-components-nine-wins-you-might-have-overlooked&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://medium.com/@housecor/react-stateless-functional-components-nine-wins-you-might-have-overlooked-997b0d933dbc?swoff=true#.y0olcg5dt&quot;&gt;https://medium.com/@housecor/react-stateless-functional-components-nine-wins-you-might-have-overlooked-997b0d933dbc?swoff=true#.y0olcg5dt&lt;/a&gt;&lt;/li&gt;
 &lt;li&gt;&lt;a href=&quot;http://engineering.blogfoster.com/higher-order-components-theory-and-practice/&quot;&gt;http://engineering.blogfoster.com/higher-order-components-theory-and-practice/&lt;/a&gt;&lt;/li&gt;
 &lt;li&gt;&lt;a href=&quot;https://facebook.github.io/react/&quot;&gt;https://facebook.github.io/react/&lt;/a&gt;&lt;/li&gt;
 &lt;/ol&gt;
