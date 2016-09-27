@@ -93,44 +93,44 @@ export default Enhance(MyComponent);
 
 <h3>操作props</h3>
 
-<p>例如如下代码: 判断登录用户
-<code>javascript
-const WithLoginUser = (WrappedComponent) =&gt; (props) =&gt; {
+<p>例如如下代码: 判断登录用户</p>
+
+<pre><code class="javascript">const WithLoginUser = (WrappedComponent) =&gt; (props) =&gt; {
     const user = getCurrentLoginUser();
     return (
         &lt;WrappedComponent {...props} user={user}/&gt;
     )
 }
-</code></p>
+</code></pre>
 
-<p>根据props内容条件渲染
-<code>javascript
-const ConditionRender = (WrappedComponent) =&gt; (props) =&gt; {
+<p>根据props内容条件渲染</p>
+
+<pre><code class="javascript">const ConditionRender = (WrappedComponent) =&gt; (props) =&gt; {
     if (props.data !== null) {
         return null;
     } else {
         return &lt;WrappedComponent {...props} /&gt;
     }
 }
-</code></p>
+</code></pre>
 
 <h3>封装通用的样式</h3>
 
-<p>可以做一些通用样式的处理
-<code>javascript
-const StyledComponent = (WrappedComponent) =&gt; (props) =&gt; {
+<p>可以做一些通用样式的处理</p>
+
+<pre><code class="javascript">const StyledComponent = (WrappedComponent) =&gt; (props) =&gt; {
     return (
         &lt;div className="general-style"&gt;
             &lt;WrappedComponent {...props} /&gt;
         &lt;/div&gt;
     )
 }
-</code></p>
+</code></pre>
 
 <h3>参考材料</h3>
 
 <ol>
-<li><a href="https://medium.com/@housecor/react-stateless-functional-components-nine-wins-you-might-have-overlooked-997b0d933dbc#.94m1ekpl6">https://medium.com/@housecor/react-stateless-functional-components-nine-wins-you-might-have-overlooked-997b0d933dbc#.94m1ekpl6</a></li>
+<li><a href="https://medium.com/@housecor/react-stateless-functional-components-nine-wins-you-might-have-overlooked">https://medium.com/@housecor/react-stateless-functional-components-nine-wins-you-might-have-overlooked</a></li>
 <li><a href="http://engineering.blogfoster.com/higher-order-components-theory-and-practice/">http://engineering.blogfoster.com/higher-order-components-theory-and-practice/</a></li>
 <li><a href="https://facebook.github.io/react/">https://facebook.github.io/react/</a></li>
 </ol>

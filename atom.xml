@@ -4,7 +4,7 @@
  <title>奔跑的蚂蚁</title>
  <link href="http://wangtaox.github.io/atom.xml" rel="self"/>
  <link href="http://wangtaox.github.io"/>
- <updated>2016-09-27T21:00:25+08:00</updated>
+ <updated>2016-09-27T21:02:28+08:00</updated>
  <id>http://wangtaox.github.io/</id>
  <author>
    <name>TaoWang</name>
@@ -57,44 +57,44 @@ export default Enhance(MyComponent);
 
 &lt;h3&gt;操作props&lt;/h3&gt;
 
-&lt;p&gt;例如如下代码: 判断登录用户
-&lt;code&gt;javascript
-const WithLoginUser = (WrappedComponent) =&amp;gt; (props) =&amp;gt; {
+&lt;p&gt;例如如下代码: 判断登录用户&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;javascript&quot;&gt;const WithLoginUser = (WrappedComponent) =&amp;gt; (props) =&amp;gt; {
     const user = getCurrentLoginUser();
     return (
         &amp;lt;WrappedComponent {...props} user={user}/&amp;gt;
     )
 }
-&lt;/code&gt;&lt;/p&gt;
+&lt;/code&gt;&lt;/pre&gt;
 
-&lt;p&gt;根据props内容条件渲染
-&lt;code&gt;javascript
-const ConditionRender = (WrappedComponent) =&amp;gt; (props) =&amp;gt; {
+&lt;p&gt;根据props内容条件渲染&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;javascript&quot;&gt;const ConditionRender = (WrappedComponent) =&amp;gt; (props) =&amp;gt; {
     if (props.data !== null) {
         return null;
     } else {
         return &amp;lt;WrappedComponent {...props} /&amp;gt;
     }
 }
-&lt;/code&gt;&lt;/p&gt;
+&lt;/code&gt;&lt;/pre&gt;
 
 &lt;h3&gt;封装通用的样式&lt;/h3&gt;
 
-&lt;p&gt;可以做一些通用样式的处理
-&lt;code&gt;javascript
-const StyledComponent = (WrappedComponent) =&amp;gt; (props) =&amp;gt; {
+&lt;p&gt;可以做一些通用样式的处理&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;javascript&quot;&gt;const StyledComponent = (WrappedComponent) =&amp;gt; (props) =&amp;gt; {
     return (
         &amp;lt;div className=&quot;general-style&quot;&amp;gt;
             &amp;lt;WrappedComponent {...props} /&amp;gt;
         &amp;lt;/div&amp;gt;
     )
 }
-&lt;/code&gt;&lt;/p&gt;
+&lt;/code&gt;&lt;/pre&gt;
 
 &lt;h3&gt;参考材料&lt;/h3&gt;
 
 &lt;ol&gt;
-&lt;li&gt;&lt;a href=&quot;https://medium.com/@housecor/react-stateless-functional-components-nine-wins-you-might-have-overlooked-997b0d933dbc#.94m1ekpl6&quot;&gt;https://medium.com/@housecor/react-stateless-functional-components-nine-wins-you-might-have-overlooked-997b0d933dbc#.94m1ekpl6&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://medium.com/@housecor/react-stateless-functional-components-nine-wins-you-might-have-overlooked&quot;&gt;https://medium.com/@housecor/react-stateless-functional-components-nine-wins-you-might-have-overlooked&lt;/a&gt;&lt;/li&gt;
 &lt;li&gt;&lt;a href=&quot;http://engineering.blogfoster.com/higher-order-components-theory-and-practice/&quot;&gt;http://engineering.blogfoster.com/higher-order-components-theory-and-practice/&lt;/a&gt;&lt;/li&gt;
 &lt;li&gt;&lt;a href=&quot;https://facebook.github.io/react/&quot;&gt;https://facebook.github.io/react/&lt;/a&gt;&lt;/li&gt;
 &lt;/ol&gt;
