@@ -4,12 +4,103 @@
  <title>奔跑的蚂蚁</title>
  <link href="http://wangtaox.github.io/atom.xml" rel="self"/>
  <link href="http://wangtaox.github.io"/>
- <updated>2016-09-02T15:43:42+08:00</updated>
+ <updated>2016-09-27T21:00:25+08:00</updated>
  <id>http://wangtaox.github.io/</id>
  <author>
    <name>TaoWang</name>
  </author>
 
+ 
+ <entry>
+   <title>React higher order component</title>
+   <link href="http://wangtaox.github.io/2016/09/26/react-hoc.html"/>
+   <updated>2016-09-26T00:00:00+08:00</updated>
+   <id>http://wangtaox.github.io/2016/09/26/react-hoc</id>
+   <content type="html">&lt;h3&gt;什么是Higher Order Component ?&lt;/h3&gt;
+
+&lt;p&gt;HOC(Higher Order Component)主要用来封装(增强)其它组件，即一个组件封装了另外一个组件。&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;javascript&quot;&gt;const MyComponent = (props) =&amp;gt; {}
+   if (props.data) {
+       return (
+            &amp;lt;h1&amp;gt;Waiting&amp;lt;/h1&amp;gt;
+       );
+   }
+
+   return &amp;lt;div&amp;gt;{props.data}&amp;lt;/div&amp;gt;;
+}
+
+const Enhance = (WrappedComponent) =&amp;gt; class extends Component {
+    constructor() {
+        this.state = { data: null }; 
+    }
+
+    componentDidMount() {
+        this.setState({ data: &quot;Hello&quot;});
+    }
+
+    render() {
+        return &amp;lt;WrappedComponent {...this.props} data={this.state.data}/&amp;gt;
+    }
+}
+
+export default Enhance(MyComponent);
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;如上述代码所示，Enhance(MyComponent)就返回了一个HOC，这个返回的组件封装了MyComponent，因此，HOC可以完成以下一些常用的操作，比如:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;操作props&lt;/li&gt;
+&lt;li&gt;封装通用的样式&lt;/li&gt;
+&lt;/ul&gt;
+
+
+&lt;h3&gt;操作props&lt;/h3&gt;
+
+&lt;p&gt;例如如下代码: 判断登录用户
+&lt;code&gt;javascript
+const WithLoginUser = (WrappedComponent) =&amp;gt; (props) =&amp;gt; {
+    const user = getCurrentLoginUser();
+    return (
+        &amp;lt;WrappedComponent {...props} user={user}/&amp;gt;
+    )
+}
+&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;根据props内容条件渲染
+&lt;code&gt;javascript
+const ConditionRender = (WrappedComponent) =&amp;gt; (props) =&amp;gt; {
+    if (props.data !== null) {
+        return null;
+    } else {
+        return &amp;lt;WrappedComponent {...props} /&amp;gt;
+    }
+}
+&lt;/code&gt;&lt;/p&gt;
+
+&lt;h3&gt;封装通用的样式&lt;/h3&gt;
+
+&lt;p&gt;可以做一些通用样式的处理
+&lt;code&gt;javascript
+const StyledComponent = (WrappedComponent) =&amp;gt; (props) =&amp;gt; {
+    return (
+        &amp;lt;div className=&quot;general-style&quot;&amp;gt;
+            &amp;lt;WrappedComponent {...props} /&amp;gt;
+        &amp;lt;/div&amp;gt;
+    )
+}
+&lt;/code&gt;&lt;/p&gt;
+
+&lt;h3&gt;参考材料&lt;/h3&gt;
+
+&lt;ol&gt;
+&lt;li&gt;&lt;a href=&quot;https://medium.com/@housecor/react-stateless-functional-components-nine-wins-you-might-have-overlooked-997b0d933dbc#.94m1ekpl6&quot;&gt;https://medium.com/@housecor/react-stateless-functional-components-nine-wins-you-might-have-overlooked-997b0d933dbc#.94m1ekpl6&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;http://engineering.blogfoster.com/higher-order-components-theory-and-practice/&quot;&gt;http://engineering.blogfoster.com/higher-order-components-theory-and-practice/&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://facebook.github.io/react/&quot;&gt;https://facebook.github.io/react/&lt;/a&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+</content>
+ </entry>
  
  <entry>
    <title>TCP TIME_WAIT状态与tcp_tw_recycle</title>
@@ -20,7 +111,7 @@
 
 &lt;h3&gt;TIME_WAIT状态的作用&lt;/h3&gt;
 
-&lt;p&gt;如图，TIME_WAIT状态主要用来数据的错误传输，比如一个连接，在断开后，又新建了相同的连接(IP和端口的四元组)，上一次断开的连接中某些数据可能由于网络拥塞而延迟到来，显然延迟的数据不是属于这一个新建的连接的，为了防止这种情况，TIME_WAIT状态会等待2&lt;a href=&quot;https://en.wikipedia.org/wiki/Maximum_segment_lifetime&quot;&gt;MSL&lt;/a&gt;，即两倍最大报文生存时间。&lt;/p&gt;
+&lt;p&gt;如图，TIME_WAIT状态主要用来处理数据的错误传输，比如一个连接，在断开后，又新建了相同的连接(IP和端口的四元组)，上一次断开的连接中某些数据可能由于网络拥塞而延迟到来，显然延迟的数据不是属于这一个新建的连接的，为了防止这种情况，TIME_WAIT状态会等待2&lt;a href=&quot;https://en.wikipedia.org/wiki/Maximum_segment_lifetime&quot;&gt;MSL&lt;/a&gt;，即两倍最大报文生存时间。&lt;/p&gt;
 
 &lt;p&gt;&lt;img src=&quot;/media/files/2016/09/02/Time_wait.svg&quot; alt=&quot;time_wait&quot; /&gt;&lt;/p&gt;
 

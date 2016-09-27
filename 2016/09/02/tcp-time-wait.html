@@ -56,7 +56,7 @@
 
 <h3>TIME_WAIT状态的作用</h3>
 
-<p>如图，TIME_WAIT状态主要用来数据的错误传输，比如一个连接，在断开后，又新建了相同的连接(IP和端口的四元组)，上一次断开的连接中某些数据可能由于网络拥塞而延迟到来，显然延迟的数据不是属于这一个新建的连接的，为了防止这种情况，TIME_WAIT状态会等待2<a href="https://en.wikipedia.org/wiki/Maximum_segment_lifetime">MSL</a>，即两倍最大报文生存时间。</p>
+<p>如图，TIME_WAIT状态主要用来处理数据的错误传输，比如一个连接，在断开后，又新建了相同的连接(IP和端口的四元组)，上一次断开的连接中某些数据可能由于网络拥塞而延迟到来，显然延迟的数据不是属于这一个新建的连接的，为了防止这种情况，TIME_WAIT状态会等待2<a href="https://en.wikipedia.org/wiki/Maximum_segment_lifetime">MSL</a>，即两倍最大报文生存时间。</p>
 
 <p><img src="/media/files/2016/09/02/Time_wait.svg" alt="time_wait" /></p>
 
@@ -124,7 +124,7 @@
     <a href="/2016/07/29/flannel-vxlan.html"><i class="fa fa-chevron-left"></i></a>
     
     
-    <i class="fa fa-circle"></i>
+    <a href="/2016/09/26/react-hoc.html"><i class="fa fa-chevron-right"></i></a>
     
     </span>
   </div>
