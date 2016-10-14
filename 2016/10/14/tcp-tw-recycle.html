@@ -5,7 +5,7 @@
     <meta name="author" content="TaoWang" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     
-    <title>奔跑的蚂蚁</title>
+    <title>内核选项tcp_tw_recycle原理</title>
     
     <link rel="shortcut icon" href="/media/favicon.ico">
     <link href="/atom.xml" rel="alternate" title="奔跑的蚂蚁" type="application/atom+xml" />
@@ -33,29 +33,26 @@
           </nav>
         </header>
         <div id="content">
-        <div>
-  <ul class="listing">
+        <article>
+  <section class="title">
+    <h2>内核选项tcp_tw_recycle原理 </h2>
+  </section>
+  <section class="meta">
+  <span class="time">
+    <time datetime="2016-10-14">2016-10-14</time>
+  </span>
   
-  <article class="content">
-    <section class="title">
-      <h2><a href="/2016/10/14/tcp-tw-recycle.html">内核选项tcp_tw_recycle原理</a></h2>
-    </section>
-    <section class="meta">
-      <span class="time">
-        <time datetime="2016-10-14">2016-10-14</time>
-      </span>
-      
-      <span class="tags">
-        
-        <a href="/tags.html#Linux" title="Linux">#Linux</a>
-        
-        <a href="/tags.html#TCP" title="TCP">#TCP</a>
-        
-      </span>
+  <span class="tags">
     
-    </section>
-    <section class="post">
-     <h3>why TIME_WAIT state ？</h3>
+    <a href="/tags.html#Linux" title="Linux">#Linux</a>
+    
+    <a href="/tags.html#TCP" title="TCP">#TCP</a>
+    
+  </span>
+  
+  </section>
+  <section class="post">
+  <h3>why TIME_WAIT state ？</h3>
 
 <p>在TCP状态机中，TIME_WAIT状态主要用来避免延迟的旧连接的数据被相同的新连接(连接相同指SRC IP:PORT DST IP:PORT相同)所接收。</p>
 
@@ -231,12 +228,29 @@
 
 <p><a href="http://www.cnblogs.com/lulu/p/4149312.html">http://www.cnblogs.com/lulu/p/4149312.html</a></p>
 
-    </section>
-  </article>
-  
-  </ul>
-</div>
+  </section>
+  <div class="divider">
+    <span>
+    
+    <a href="/2016/09/26/react-hoc.html"><i class="fa fa-chevron-left"></i></a>
+    
+    
+    <i class="fa fa-circle"></i>
+    
+    </span>
+  </div>
 
+  <section class="comment">
+  <div id="disqus_thread"></div>
+  <script type="text/javascript">
+      var disqus_shortname = 'wangtaoX';
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = 'https://' + disqus_shortname + '.disqus.com/embed.js';
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  </section>
+</article>
 
         </div>
         <footer>

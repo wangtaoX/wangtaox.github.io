@@ -4,12 +4,195 @@
  <title>奔跑的蚂蚁</title>
  <link href="http://wangtaox.github.io/atom.xml" rel="self"/>
  <link href="http://wangtaox.github.io"/>
- <updated>2016-09-27T21:05:07+08:00</updated>
+ <updated>2016-10-14T17:16:31+08:00</updated>
  <id>http://wangtaox.github.io/</id>
  <author>
    <name>TaoWang</name>
  </author>
 
+ 
+ <entry>
+   <title>内核选项tcp_tw_recycle原理</title>
+   <link href="http://wangtaox.github.io/2016/10/14/tcp-tw-recycle.html"/>
+   <updated>2016-10-14T00:00:00+08:00</updated>
+   <id>http://wangtaox.github.io/2016/10/14/tcp-tw-recycle</id>
+   <content type="html">&lt;h3&gt;why TIME_WAIT state ？&lt;/h3&gt;
+
+&lt;p&gt;在TCP状态机中，TIME_WAIT状态主要用来避免延迟的旧连接的数据被相同的新连接(连接相同指SRC IP:PORT DST IP:PORT相同)所接收。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://www.isi.edu/touch/pubs/infocomm99/infocomm99-web/fig1.gif&quot; alt=&quot;time_wait&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;如上图所示:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;连接&amp;lt;(IP a : Port p) - (IP b : Port q)&gt;断开&lt;/li&gt;
+&lt;li&gt;新连接&amp;lt;(IP a : Port p) - (IP b : Port q)&gt;建立&lt;/li&gt;
+&lt;li&gt;上次断开连接的数据在网络中延迟并在新连接建立后到来，这样的数据应该是错误并被避免的&lt;/li&gt;
+&lt;/ol&gt;
+
+
+&lt;p&gt;TIME_WAIT状态就是来解决上面这样的问题的，一般TIME_WAIT状态等待的时间等于2MSL(最大报文存活时间的2倍)，这样就可以确保旧的延迟的报文不被新连接所接收到。&lt;/p&gt;
+
+&lt;p&gt;在Linux具体实现协议栈时，TIME_WAIT状态是保存在每个连接相关的数据(结构TCB即TCP control block，保存该连接所有的状态数据)中的，因此在一些高性能的服务器上，就希望这样的TIME_WAIT状态可以尽量的少(节省服务器内存，并且可以快速的端口重用以建立新连接)，所以&lt;a href=&quot;https://tools.ietf.org/html/rfc6191#page-3&quot;&gt;RFC6191&lt;/a&gt;提出了一种基于TCP timestamp的方法来进行快速的TIME_WAIT状态回收。&lt;/p&gt;
+
+&lt;p&gt;RFC6191在思路上借鉴了RFC1122，对比RFC1122通过序列号的递增性，RFC6191则通过TCP timestamp来进行快速的TIME_WAIT状态回收，具体思路大致是当一个新连接(SRC IP, SRC PORT, DST IP, DST PORT)到来时，如果有相同的连接处于TIME_WAIT状态，且新连接的SYN报文的timestamp要大于最近该连接上的timestamp时，可以接受该连接建立的请求。即要求了来自同一个连接(4元组)的timestamp是单调递增的。&lt;/p&gt;
+
+&lt;h3&gt;tcp_tw_recycle内核实现&lt;/h3&gt;
+
+&lt;p&gt;在内核中，当开启了tcp_tw_recycle选项时，即:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;shell&quot;&gt;$ echo 1 &amp;gt; /proc/sys/net/ipv4/tcp_tw_recycle
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;内核TCP连接建立时函数(未贴完):&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;c&quot;&gt;1440 int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
+1441 {
+1442         struct tcp_options_received tmp_opt;
+1443         struct request_sock *req;
+1444         struct inet_request_sock *ireq;
+1445         struct tcp_sock *tp = tcp_sk(sk);
+1446         struct dst_entry *dst = NULL;
+1447         __be32 saddr = ip_hdr(skb)-&amp;gt;saddr;
+1448         __be32 daddr = ip_hdr(skb)-&amp;gt;daddr;
+1449         __u32 isn = TCP_SKB_CB(skb)-&amp;gt;when;
+1450         bool want_cookie = false;
+1451         struct flowi4 fl4;
+1452         struct tcp_fastopen_cookie foc = { .len = -1 };
+1453         struct tcp_fastopen_cookie valid_foc = { .len = -1 };
+1454         struct sk_buff *skb_synack;
+1455         int do_fastopen;
+1456
+1457         /* Never answer to SYNs send to broadcast or multicast */
+1458         if (skb_rtable(skb)-&amp;gt;rt_flags &amp;amp; (RTCF_BROADCAST | RTCF_MULTICAST))
+1459                 goto drop;
+1460
+1461         /* TW buckets are converted to open requests without
+1462  * limitations, they conserve resources and peer is
+1463  * evidently real one.
+1464  */
+1465         if (inet_csk_reqsk_queue_is_full(sk) &amp;amp;&amp;amp; !isn) {
+1466                 want_cookie = tcp_syn_flood_action(sk, skb, &quot;TCP&quot;);
+1467                 if (!want_cookie)
+1468                         goto drop;
+1469         }
+1470
+1471         /* Accept backlog is full. If we have already queued enough
+1472  * of warm entries in syn queue, drop request. It is better than
+1473  * clogging syn queue with openreqs with exponentially increasing
+1474  * timeout.
+1475  */
+1476         if (sk_acceptq_is_full(sk) &amp;amp;&amp;amp; inet_csk_reqsk_queue_young(sk) &amp;gt; 1) {
+1477                 NET_INC_STATS_BH(sock_net(sk), LINUX_MIB_LISTENOVERFLOWS);
+1478                 goto drop;
+1479         }
+1480
+1481         req = inet_reqsk_alloc(&amp;amp;tcp_request_sock_ops);
+1482         if (!req)
+1483                 goto drop;
+1484
+1485 #ifdef CONFIG_TCP_MD5SIG
+1486         tcp_rsk(req)-&amp;gt;af_specific = &amp;amp;tcp_request_sock_ipv4_ops;
+1487 #endif
+1488
+1489         tcp_clear_options(&amp;amp;tmp_opt);
+1490         tmp_opt.mss_clamp = TCP_MSS_DEFAULT;
+1491         tmp_opt.user_mss  = tp-&amp;gt;rx_opt.user_mss;
+1492         tcp_parse_options(skb, &amp;amp;tmp_opt, 0, want_cookie ? NULL : &amp;amp;foc);
+1493
+1494         if (want_cookie &amp;amp;&amp;amp; !tmp_opt.saw_tstamp)
+1495                 tcp_clear_options(&amp;amp;tmp_opt);
+1496
+1497         tmp_opt.tstamp_ok = tmp_opt.saw_tstamp;
+1498         tcp_openreq_init(req, &amp;amp;tmp_opt, skb);
+1499
+1500         ireq = inet_rsk(req);
+1501         ireq-&amp;gt;loc_addr = daddr;
+1502         ireq-&amp;gt;rmt_addr = saddr;
+1503         ireq-&amp;gt;no_srccheck = inet_sk(sk)-&amp;gt;transparent;
+1504         ireq-&amp;gt;opt = tcp_v4_save_options(skb);
+1505
+1506         if (security_inet_conn_request(sk, skb, req))
+1507                 goto drop_and_free;
+1508
+1509         if (!want_cookie || tmp_opt.tstamp_ok)
+1510                 TCP_ECN_create_request(req, skb, sock_net(sk));
+1511
+1512         if (want_cookie) {
+1513                 isn = cookie_v4_init_sequence(sk, skb, &amp;amp;req-&amp;gt;mss);
+1514                 req-&amp;gt;cookie_ts = tmp_opt.tstamp_ok;
+1515         } else if (!isn) {
+1516                 /* VJ&#39;s idea. We save last timestamp seen
+1517  * from the destination in peer table, when entering
+1518  * state TIME-WAIT, and check against it before
+1519  * accepting new connection request.
+1520  *
+1521  * If &quot;isn&quot; is not zero, this request hit alive
+1522  * timewait bucket, so that all the necessary checks
+1523  * are made in the function processing timewait state.
+1524  */
+1525                 if (tmp_opt.saw_tstamp &amp;amp;&amp;amp;
+1526                     tcp_death_row.sysctl_tw_recycle &amp;amp;&amp;amp;
+1527                     (dst = inet_csk_route_req(sk, &amp;amp;fl4, req)) != NULL &amp;amp;&amp;amp;
+1528                     fl4.daddr == saddr) {
+1529                         if (!tcp_peer_is_proven(req, dst, true)) {
+1530                                 NET_INC_STATS_BH(sock_net(sk), LINUX_MIB_PAWSPASSIVEREJECTED);
+1531                                 goto drop_and_release;
+1532                         }
+1533                 }
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;可以看出在1525行条件判断处，开启TCP_TW_RECYCLE时，会进入函数tcp_peer_is_proven，即判断时间戳的递增性，该函数代码如下:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;c&quot;&gt;536 bool tcp_peer_is_proven(struct request_sock *req, struct dst_entry *dst, bool paws_check)
+537 {
+538         struct tcp_metrics_block *tm;
+539         bool ret;
+540
+541         if (!dst)
+542                 return false;
+543
+544         rcu_read_lock();
+545         tm = __tcp_get_metrics_req(req, dst);
+546         if (paws_check) {
+547                 if (tm &amp;amp;&amp;amp;
+548                     (u32)get_seconds() - tm-&amp;gt;tcpm_ts_stamp &amp;lt; TCP_PAWS_MSL &amp;amp;&amp;amp;
+549                     (s32)(tm-&amp;gt;tcpm_ts - req-&amp;gt;ts_recent) &amp;gt; TCP_PAWS_WINDOW)
+550                         ret = false;
+551                 else
+552                         ret = true;
+553         } else {
+554                 if (tm &amp;amp;&amp;amp; tcp_metric_get(tm, TCP_METRIC_RTT) &amp;amp;&amp;amp; tm-&amp;gt;tcpm_ts_stamp)
+555                         ret = true;
+556                 else
+557                         ret = false;
+558         }
+559         rcu_read_unlock();
+560
+561         return ret;
+562 }
+563 EXPORT_SYMBOL_GPL(tcp_peer_is_proven);
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;在549行 (s32)(tm-&gt;tcpm_ts - req-&gt;ts_recent) &gt; TCP_PAWS_WINDOW) 即为当前时间小于最近该连接上的时间戳(这个时间戳内核会记录的)，然后返回了false，连接建立就会失败。&lt;/p&gt;
+
+&lt;h3&gt;NAT 与 tcp_tw_recycle&lt;/h3&gt;
+
+&lt;p&gt;当连接通过NAT机器转换到达开启了TCP_TW_RECYCLE的机器上时，由于NAT机器在做转换时并不会修改协议中的时间戳，因此来自不同机器的请求的时间戳不一定是单调递增的，根据上述原理，所以就会出现连接建立失败的情况。&lt;/p&gt;
+
+&lt;p&gt;所以一般机器都是关闭了该选项的，以避免出现连接建立失败的情况。&lt;/p&gt;
+
+&lt;h3&gt;参考资料&lt;/h3&gt;
+
+&lt;p&gt;&lt;a href=&quot;http://www.isi.edu/touch/pubs/infocomm99/infocomm99-web/&quot;&gt;http://www.isi.edu/touch/pubs/infocomm99/infocomm99-web/&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://tools.ietf.org/html/rfc1122#section-4.2.2.13&quot;&gt;https://tools.ietf.org/html/rfc1122#section-4.2.2.13&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://tools.ietf.org/html/rfc6191#page-3&quot;&gt;https://tools.ietf.org/html/rfc6191#page-3&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;http://www.cnblogs.com/lulu/p/4149312.html&quot;&gt;http://www.cnblogs.com/lulu/p/4149312.html&lt;/a&gt;&lt;/p&gt;
+</content>
+ </entry>
  
  <entry>
    <title>React higher order component</title>
@@ -1151,726 +1334,6 @@ service chatservice {
 &lt;li&gt;&lt;a href=&quot;https://github.com/gengo/grpc-gateway&quot;&gt;https://github.com/gengo/grpc-gateway&lt;/a&gt;&lt;/li&gt;
 &lt;/ul&gt;
 
-</content>
- </entry>
- 
- <entry>
-   <title>openstack rpc实现源码分析</title>
-   <link href="http://wangtaox.github.io/2015/11/21/rpc.html"/>
-   <updated>2015-11-21T00:00:00+08:00</updated>
-   <id>http://wangtaox.github.io/2015/11/21/rpc</id>
-   <content type="html">&lt;h3&gt;RabbitMQ的消息模型&lt;/h3&gt;
-
-&lt;h4&gt;RabbitMQ 基本概念:&lt;/h4&gt;
-
-&lt;ul&gt;
-&lt;li&gt;Producer: 消息生产者&lt;/li&gt;
-&lt;li&gt;Consumer: 消息消费者&lt;/li&gt;
-&lt;li&gt;Exchange: 接受消息的载体&lt;/li&gt;
-&lt;li&gt;Message: RabbitMQ中的基本消息单元&lt;/li&gt;
-&lt;li&gt;Queue: 存储并接受Exchange分发的消息, 用于Consumer接受消息&lt;/li&gt;
-&lt;li&gt;Routing Key: 标识Message, 用于Exchange分发消息的依据&lt;/li&gt;
-&lt;li&gt;Binding: Queue与Exchange绑定, 可选的binding key参数用于指定特定的消息(相当于消息的routing key)&lt;/li&gt;
-&lt;/ul&gt;
-
-
-&lt;p&gt;在RabbitMQ中, 消息是发送给&lt;code&gt;Exchange&lt;/code&gt;的, 而不是&lt;code&gt;Queue&lt;/code&gt;, &lt;code&gt;Producer&lt;/code&gt;将带有&lt;code&gt;Routing Key&lt;/code&gt;的消息发送给相应的
-&lt;code&gt;Exchange&lt;/code&gt;后, 整个消息的发送过程就结束了; 消息的接收是通过&lt;code&gt;Queue&lt;/code&gt;完成的, &lt;code&gt;Consumer&lt;/code&gt;在RabbitMQ中定义
-一个&lt;code&gt;Queue&lt;/code&gt;, 与相应的&lt;code&gt;Exchange&lt;/code&gt;进行&lt;code&gt;Binding&lt;/code&gt;, 在&lt;code&gt;Binding&lt;/code&gt;时可指定感兴趣的消息, 通过&lt;code&gt;binding key&lt;/code&gt;来完成,这
-样消息就会被&lt;code&gt;Exchange&lt;/code&gt;根据&lt;code&gt;binding key&lt;/code&gt;分发到相应的&lt;code&gt;Queue&lt;/code&gt;上,  &lt;code&gt;Consumer&lt;/code&gt;接受&lt;code&gt;Queue&lt;/code&gt;的消息即可,
-这样整个消息的接收就完成了.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;http://www.rabbitmq.com/img/tutorials/python-three-overall.png&quot; alt=&quot;img&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;如上图所示, &lt;code&gt;P&lt;/code&gt;代表&lt;code&gt;Producer&lt;/code&gt;, &lt;code&gt;x&lt;/code&gt;代表&lt;code&gt;Exchange&lt;/code&gt;, 红色的代表&lt;code&gt;Queue&lt;/code&gt;以及相应的queue name, binding表示上
-述的&lt;code&gt;Binding&lt;/code&gt;过程, &lt;code&gt;C&lt;/code&gt;代表&lt;code&gt;Consumer&lt;/code&gt;.&lt;/p&gt;
-
-&lt;h4&gt;RabbitMQ中的Exchange&lt;/h4&gt;
-
-&lt;p&gt;Exchange在RabbitMQ中也有相应的分类:&lt;code&gt;Direct&lt;/code&gt; &lt;code&gt;Fanout&lt;/code&gt; &lt;code&gt;Topic&lt;/code&gt;&lt;/p&gt;
-
-&lt;p&gt;Exchange的分类是为了实现不同的通信模式&lt;/p&gt;
-
-&lt;ul&gt;
-&lt;li&gt;Fanout: 消息将分发给所有与&lt;code&gt;Exchange&lt;/code&gt;绑定的&lt;code&gt;Queue&lt;/code&gt;&lt;/li&gt;
-&lt;li&gt;Direct: 消息将通过 &lt;em&gt;完全匹配&lt;/em&gt; &lt;code&gt;Routing Key&lt;/code&gt;分发到相应的&lt;code&gt;Queue&lt;/code&gt;&lt;/li&gt;
-&lt;li&gt;Topic: 消息将通过 &lt;em&gt;正则匹配(支持特殊字符)&lt;/em&gt; &lt;code&gt;Routing Key&lt;/code&gt;分发到相应的&lt;code&gt;Queue&lt;/code&gt;&lt;/li&gt;
-&lt;/ul&gt;
-
-
-&lt;p&gt;因此, 当使用&lt;code&gt;Fanout&lt;/code&gt;类型的&lt;code&gt;Exchange&lt;/code&gt;, 消息将分发至所有与该&lt;code&gt;Exchange&lt;/code&gt;绑定的&lt;code&gt;Queue&lt;/code&gt;上, 此时不会匹配&lt;code&gt;Routing Key&lt;/code&gt;,
-当使用&lt;code&gt;Direct&lt;/code&gt;类型的&lt;code&gt;Exchange&lt;/code&gt;, 消息将通过&lt;em&gt;完全匹配&lt;/em&gt;(&lt;code&gt;Routing Key&lt;/code&gt;与&lt;code&gt;Binding Key&lt;/code&gt;)被分发至相应的&lt;code&gt;Queue&lt;/code&gt;, 同理,
-&lt;code&gt;Topic&lt;/code&gt;类型的&lt;code&gt;Exchange&lt;/code&gt;会进行&lt;em&gt;正则匹配&lt;/em&gt;.&lt;/p&gt;
-
-&lt;p&gt;如图, &lt;code&gt;Direct Exchange&lt;/code&gt;类型的消息模型:&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;http://www.rabbitmq.com/img/tutorials/direct-exchange.png&quot; alt=&quot;img&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;如图, &lt;code&gt;Topic Exchange&lt;/code&gt;类型的消息模型:&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;http://www.rabbitmq.com/img/tutorials/python-five.png&quot; alt=&quot;img&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;从两种类型的&lt;code&gt;Exchange&lt;/code&gt;可以看出, 区别仅在于分发消息时对于&lt;code&gt;Routing Key&lt;/code&gt;的匹配方式, &lt;code&gt;Direct&lt;/code&gt;是&lt;em&gt;完全匹配&lt;/em&gt;&lt;code&gt;Queue&lt;/code&gt;的&lt;code&gt;Binding Key&lt;/code&gt;,
-&lt;code&gt;Topic&lt;/code&gt;则是使用&lt;em&gt;正则匹配&lt;/em&gt;.&lt;/p&gt;
-
-&lt;h3&gt;Openstack RPC&lt;/h3&gt;
-
-&lt;p&gt;在Openstack中, 组件内的通信主要通过消息队列完成, 这样可以使整个系统以松耦合的方式进行协作, 以RabbitMQ为例,
-Openstack实现了组件间的RPC调用, 主要包括&lt;em&gt;同步&lt;/em&gt;和&lt;em&gt;异步&lt;/em&gt;两种调用方式:&lt;/p&gt;
-
-&lt;pre&gt;&lt;code class=&quot;python&quot;&gt;    &quot;&quot;&quot;oslo/messaging/rpc/client.py&quot;&quot;&quot;
-    class RPCClient(object):
-
-        &quot;&quot;&quot;A class for invoking methods on remote servers.
-        The RPCClient class is responsible for sending method invocations to remote
-        servers via a messaging transport.
-
-        A cast() invocation just sends the request and returns immediately. 
-        A call() invocation waits for the server to send a return value.
-        &quot;&quot;&quot;
-
-        def cast(self, ctxt, method, **kwargs):
-            &quot;&quot;&quot;Invoke a method and return immediately.
-            &quot;&quot;&quot;
-            self.prepare().cast(ctxt, method, **kwargs)
-        def call(self, ctxt, method, **kwargs):
-            &quot;&quot;&quot;Invoke a method and wait for a reply.
-            &quot;&quot;&quot;
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;插入的代码只是RPCClient实现的一部分, 从注释可以看出, &lt;code&gt;cast函数&lt;/code&gt;属于异步调用, &lt;code&gt;call函数&lt;/code&gt;属于同步调用.&lt;/p&gt;
-
-&lt;h4&gt;cast实现方式&lt;/h4&gt;
-
-&lt;p&gt;&lt;img src=&quot;http://docs.openstack.org/developer/nova/_images/flow2.png&quot; alt=&quot;img&quot; /&gt;&lt;/p&gt;
-
-&lt;ol&gt;
-&lt;li&gt;rpc调用方会初始化&lt;code&gt;Topic Publisher&lt;/code&gt;, 将消息以&lt;code&gt;Routing Key&lt;/code&gt;为topic发送至配置的&lt;code&gt;Exchange&lt;/code&gt;中&lt;/li&gt;
-&lt;li&gt;&lt;p&gt;rpc接收方会初始化两个&lt;code&gt;Topic Cosumer&lt;/code&gt;, 分别通过topic和topic.host为&lt;code&gt;binding key&lt;/code&gt;将&lt;code&gt;Queue&lt;/code&gt;与&lt;code&gt;Exchange&lt;/code&gt;绑定,
-这样接收方就可以接收这两种类型的rpc message&lt;/p&gt;
-
-&lt;p&gt;  &lt;code&gt;topic&lt;/code&gt;即为消息的&lt;code&gt;Routing Key&lt;/code&gt;, 所以接收方可以接受到调用方的rpc message.&lt;br&gt;
-  &lt;code&gt;topic.host&lt;/code&gt;为特定的host上的接收方获取rpc message的方式, 例如: l3-agent.host1(通知host1上的l3-agent进行相关rpc调用)&lt;/p&gt;&lt;/li&gt;
-&lt;/ol&gt;
-
-
-&lt;h4&gt;call实现方式&lt;/h4&gt;
-
-&lt;p&gt;&lt;img src=&quot;http://docs.openstack.org/developer/nova/_images/flow1.png&quot; alt=&quot;img&quot; /&gt;&lt;/p&gt;
-
-&lt;ol&gt;
-&lt;li&gt;rpc调用方初始化&lt;code&gt;Topic Publisher&lt;/code&gt;用于发送rpc message, 同时初始化一个&lt;code&gt;Direct Consumer&lt;/code&gt;用于接收返回的rpc调用结果,
-为了保证收到相应的rpc调用的结果, rpc message中会保存一个唯一标识该消息的messga id(UUID类型), 消息以&lt;code&gt;Routing Key&lt;/code&gt;为topic发送至
-&lt;code&gt;Exchange&lt;/code&gt;中&lt;/li&gt;
-&lt;li&gt;rpc接收方会初始化两个&lt;code&gt;Topic Cosumer&lt;/code&gt;, 分别通过topic和topic.host为&lt;code&gt;binding key&lt;/code&gt;将&lt;code&gt;Queue&lt;/code&gt;与&lt;code&gt;Exchange&lt;/code&gt;绑定, rpc
-接收方执行rpc调用, 完成后通过&lt;code&gt;Direct Publisher&lt;/code&gt;将结果发送到消息队列中, 返回的执行结果message的&lt;code&gt;Routing Key&lt;/code&gt;为message id
-(唯一的UUID), 将被发送至&lt;code&gt;Exchange&lt;/code&gt;(名称同样是唯一的message id), 那样调用方的&lt;code&gt;Direct Consumer&lt;/code&gt;就可以收到rpc调用的结果了.&lt;/li&gt;
-&lt;/ol&gt;
-
-
-&lt;h4&gt;以ovs_neutron_agent为例理解rpc的实现&lt;/h4&gt;
-
-&lt;p&gt;在ovs_neutron_agent的代码中, rpc的初始化如下:
-~~~python
-    &quot;&quot;&quot;plugins/openvswitch/agent/ovs_neutron_agent.py&quot;&quot;&quot;
-    def setup_rpc(self):&lt;/p&gt;
-
-&lt;pre&gt;&lt;code&gt;    ......
-    #作为rpc调用方的初始化
-    self.plugin_rpc = OVSPluginApi(topics.PLUGIN)   #与ml2 plgin通信
-    self.state_rpc = agent_rpc.PluginReportStateAPI(topics.PLUGIN)
-
-    #作为rpc接收方的初始化
-    self.topic = topics.AGENT
-    # Handle updates from service
-    self.endpoints = [self]
-    # Define the listening consumers for the agent
-    consumers = [[topics.PORT, topics.UPDATE],
-                 [topics.NETWORK, topics.DELETE],
-                 [constants.TUNNEL, topics.UPDATE],
-                 [topics.SECURITY_GROUP, topics.UPDATE],
-                 [topics.DVR, topics.UPDATE]]
-    if self.l2_pop:
-        consumers.append([topics.L2POPULATION,
-                          topics.UPDATE, cfg.CONF.host])
-    self.connection = agent_rpc.create_consumers(self.endpoints,
-                                                 self.topic,
-                                                 consumers)
-    ......
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;pre&gt;&lt;code&gt;
-self.topic为ovs_neutron_agent会接收的rpc message的类型前缀, 在topics.py中定义:
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;pre&gt;&lt;code&gt;&quot;&quot;&quot;common/topics.py&quot;&quot;&quot;
-AGENT = &#39;q-agent-notifier&#39;
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;pre&gt;&lt;code&gt;在neutron中, 消息可以分为不同的类型, 以AGENT=&#39;q-agent-notifier&#39;为例, 表示为通知agent端的消息类型.
-
-self.consumers为ovs_neutron_agent会接收的rpc message的具体类型, 在agent_rpc.create_consumers()函数中, 完成了consumers的初始化:
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;pre&gt;&lt;code&gt;&quot;&quot;&quot;agent/rpc.py&quot;&quot;&quot;
-def create_consumers(endpoints, prefix, topic_details):
-    &quot;&quot;&quot;
-    :param endpoints: The list of endpoints to process the incoming messages.
-    :param prefix: Common prefix for the plugin/agent message queues.
-    :param topic_details: A list of topics. Each topic has a name, an
-                          operation, and an optional host param keying the
-                          subscription to topic.host for plugin calls.
-    &quot;&quot;&quot;
-
-    connection = n_rpc.create_connection(new=True)
-    for details in topic_details:
-        topic, operation, node_name = itertools.islice(
-            itertools.chain(details, [None]), 3)
-
-        topic_name = topics.get_topic_name(prefix, topic, operation)
-        connection.create_consumer(topic_name, endpoints, fanout=True)
-        if node_name: #node_name即为host name
-            node_topic_name = &#39;%s.%s&#39; % (topic_name, node_name)
-            connection.create_consumer(node_topic_name,
-                                       endpoints,
-                                       fanout=False)
-    connection.consume_in_threads()
-    return connection
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;pre&gt;&lt;code&gt;
-这里需要关注的就是create\_consumer函数, 以及传递给该函数的参数topic_name, endpoints, 对于fanout参数, 当
-host存在时, 就不需要fanout类型, 因为只需要特定的host接收. topic\_name为prefix + topic + operation, 例如:
-`q-agent-notifier-port-update`, `q-agent-notifier-port-update.hostname`, `q-agent-notifier-security_grout-update`等, 
-这些例子就会作为topic_name传递给create_consumer函数, endpoints为执行rpc函数的载体, 此处应该传递的:
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;pre&gt;&lt;code&gt;    self.endpoints = [self]  #上面的setup_rpc函数中, 即为实例本身
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;pre&gt;&lt;code&gt;&lt;/code&gt;&lt;/pre&gt;
-
-&lt;pre&gt;&lt;code&gt;def get_server(target, endpoints, serializer=None):
-    assert TRANSPORT is not None
-    serializer = RequestContextSerializer(serializer)
-    return messaging.get_rpc_server(TRANSPORT, target, endpoints,
-                                    &#39;eventlet&#39;, serializer)
-
-class Connection(object):
-
-    def __init__(self):
-        super(Connection, self).__init__()
-        self.servers = []
-
-    def create_consumer(self, topic, endpoints, fanout=False):
-        target = messaging.Target(
-            topic=topic, server=cfg.CONF.host, fanout=fanout)
-        server = get_server(target, endpoints)
-        self.servers.append(server)
-
-    def consume_in_threads(self):
-        for server in self.servers:
-            server.start()
-        return self.servers
-
-# functions
-def create_connection(new=True):
-    return Connection()
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;pre&gt;&lt;code&gt;
-在create_consumer函数中, 首先初始化target, 其作用是封装了关于rpc message相关联的属性, 
-比如该消息发送到的`Exchange`, 消息的topic(Routing Key)等.
-
-&amp;gt; 注意: 在neutron中, 消息的topic其实就是消息发送进`Exchange`所带有的`Routing Key`, 比如以topic `q-agent-notifier-port-update`
-&amp;gt; 为例, 与port-update相关的rpc message应该都是`Routing Key`为`q-agent-notifier-port-update`的.
-
-然后在get_server函数中, serializer为序列化rpc消息的函数, 用于将raw rpc message序列化为适合neutron上下文的dict, 可以不用
-深入去看, 明白其含义即可, TRANSPORT为消息的传递载体, 因为openstack中可以使用rabbitmq, 以及zeromq等消息队列, TRANSPOST主要
-完成了对相应消息队列功能的封装, 这儿以rabbitmq为消息队列, 也就是说, 消息是通过TRANSPORT(rabbimq)传递的.
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;pre&gt;&lt;code&gt;def get_rpc_server(transport, target, endpoints,
-                   executor=&#39;blocking&#39;, serializer=None):
-    &quot;&quot;&quot;Construct an RPC server.
-
-    The executor parameter controls how incoming messages will be received and
-    dispatched. By default, the most simple executor is used - the blocking
-    executor.
-
-    :param transport: the messaging transport
-    :type transport: Transport
-    :param target: the exchange, topic and server to listen on
-    :type target: Target
-    :param endpoints: a list of endpoint objects
-    :type endpoints: list
-    :param executor: name of a message executor - for example
-                     &#39;eventlet&#39;, &#39;blocking&#39;
-    :type executor: str
-    :param serializer: an optional entity serializer
-    :type serializer: Serializer
-    &quot;&quot;&quot;
-    dispatcher = rpc_dispatcher.RPCDispatcher(target, endpoints, serializer)
-    return msg_server.MessageHandlingServer(transport, dispatcher, executor)
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;pre&gt;&lt;code&gt;
-在messaging.get_rpc_server函数中, 进行了dispatcher的初始化, 它的主要作用为从TRANSPORT中接受感兴趣的消息, 
-而target描述了这些感兴趣的消息的属性, target记录了这些信息.
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;pre&gt;&lt;code&gt;class MessageHandlingServer(object):
-    &quot;&quot;&quot;Server for handling messages.
-
-    Connect a transport to a dispatcher that knows how to process the
-    message using an executor that knows how the app wants to create
-    new tasks.
-    &quot;&quot;&quot;
-
-    def __init__(self, transport, dispatcher, executor=&#39;blocking&#39;):
-        &quot;&quot;&quot;Construct a message handling server.
-
-        The dispatcher parameter is a callable which is invoked with context
-        and message dictionaries each time a message is received.
-
-        The executor parameter controls how incoming messages will be received
-        and dispatched. By default, the most simple executor is used - the
-        blocking executor.
-
-        :param transport: the messaging transport
-        :type transport: Transport
-        :param dispatcher: a callable which is invoked for each method
-        :type dispatcher: callable
-        :param executor: name of message executor - for example
-                         &#39;eventlet&#39;, &#39;blocking&#39;
-        :type executor: str
-        &quot;&quot;&quot;
-        self.conf = transport.conf
-
-        self.transport = transport
-        self.dispatcher = dispatcher
-        self.executor = executor
-
-        try:
-            mgr = driver.DriverManager(&#39;oslo.messaging.executors&#39;,
-                                       self.executor)
-        except RuntimeError as ex:
-            raise ExecutorLoadFailure(self.executor, ex)
-        else:
-            self._executor_cls = mgr.driver
-            self._executor = None
-
-        super(MessageHandlingServer, self).__init__()
-
-    def start(self):
-        &quot;&quot;&quot;Start handling incoming messages.
-        &quot;&quot;&quot;
-        if self._executor is not None:
-            return
-        try:
-            listener = self.dispatcher._listen(self.transport)
-        except driver_base.TransportDriverError as ex:
-            raise ServerListenError(self.target, ex)
-
-        self._executor = self._executor_cls(self.conf, listener,
-                                            self.dispatcher)
-        self._executor.start()
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;pre&gt;&lt;code&gt;
-接下来在MessageHandlingServer(transport, dispatcher, executor)中, executor为&#39;blocking&#39;, 表示rpc函数的执行会
-阻塞当前线程, 相应的参数还有&#39;eventlet&#39;, 表示在新的eventlet线程中执行, 我们也不需要关心这部分内容, 但是
-需要明白其作用. 在上面的start函数中, listener为dispatcher的_listen所返回的结果, 从listener中, 我们就可以
-接收到一个一个的消息了, 然后通过self._executor.start(), 开始获取消息并进行相应的rpc调用.
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;pre&gt;&lt;code&gt;def spawn_with(ctxt, pool):
-    &quot;&quot;&quot;This is the equivalent of a with statement
-    but with the content of the BLOCK statement executed
-    into a greenthread
-
-    exception path grab from:
-    http://www.python.org/dev/peps/pep-0343/
-    &quot;&quot;&quot;
-
-    def complete(thread, exit):
-        exc = True
-        try:
-            try:
-                thread.wait()
-            except Exception:
-                exc = False
-                if not exit(*sys.exc_info()):
-                    raise
-        finally:
-            if exc:
-                exit(None, None, None)
-
-    callback = ctxt.__enter__()
-    thread = pool.spawn(callback)
-    thread.link(complete, ctxt.__exit__)
-
-    return thread
-
-class EventletExecutor(base.ExecutorBase):
-
-    &quot;&quot;&quot;A message executor which integrates with eventlet.
-
-    This is an executor which polls for incoming messages from a greenthread
-    and dispatches each message in its own greenthread.
-
-    The stop() method kills the message polling greenthread and the wait()
-    method waits for all message dispatch greenthreads to complete.
-    &quot;&quot;&quot;
-
-    def __init__(self, conf, listener, dispatcher):
-        super(EventletExecutor, self).__init__(conf, listener, dispatcher)
-        self.conf.register_opts(_eventlet_opts)
-        self._thread = None
-        self._greenpool = greenpool.GreenPool(self.conf.rpc_thread_pool_size)
-        self._running = False
-
-    def start(self):
-        if self._thread is not None:
-            return
-
-        @excutils.forever_retry_uncaught_exceptions
-        def _executor_thread():
-            try:
-                while self._running:
-                    incoming = self.listener.poll(timeout=base.POLL_TIMEOUT)
-                    if incoming is not None:
-                        spawn_with(ctxt=self.dispatcher(incoming),
-                                   pool=self._greenpool)
-            except greenlet.GreenletExit:
-                return
-
-        self._running = True
-        self._thread = eventlet.spawn(_executor_thread)
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;pre&gt;&lt;code&gt;
-在self.\_executor的实现中, start函数的self.listener.poll()函数不断获取rpc消息, 并将新消息在新的eventlet thread中执行, 其中spwan_with中会产生
-新的thread, 同时传递给spwan\_with的参数为ctxt=self.dispatcher(incoming), 需要特别注意, 因为dispatcher实现了[\_\_call\_\_][1]方法, 由于
-self.dispatcher是一个可调用对象, 因此ctxt=self.dispatcher(incoming)这样的调用是可行的.
-
-现在我们就可以看看在dispatcher中, 消息是怎样得到处理的.
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;pre&gt;&lt;code&gt;class RPCDispatcher(object):
-    &quot;&quot;&quot;A message dispatcher which understands RPC messages.
-
-    A MessageHandlingServer is constructed by passing a callable dispatcher
-    which is invoked with context and message dictionaries each time a message
-    is received.
-
-    RPCDispatcher is one such dispatcher which understands the format of RPC
-    messages. The dispatcher looks at the namespace, version and method values
-    in the message and matches those against a list of available endpoints.
-
-    Endpoints may have a target attribute describing the namespace and version
-    of the methods exposed by that object. All public methods on an endpoint
-    object are remotely invokable by clients.
-    &quot;&quot;&quot;
-
-    def __init__(self, target, endpoints, serializer):
-        &quot;&quot;&quot;Construct a rpc server dispatcher.
-
-        :param target: the exchange, topic and server to listen on
-        :type target: Target
-        &quot;&quot;&quot;
-
-        self.endpoints = endpoints
-        self.serializer = serializer or msg_serializer.NoOpSerializer()
-        self._default_target = msg_target.Target()
-        self._target = target
-
-    def _listen(self, transport):
-        return transport._listen(self._target)
-
-    @staticmethod
-    def _is_namespace(target, namespace):
-        return namespace == target.namespace
-
-    @staticmethod
-    def _is_compatible(target, version):
-        endpoint_version = target.version or &#39;1.0&#39;
-        return utils.version_is_compatible(endpoint_version, version)
-
-    def _do_dispatch(self, endpoint, method, ctxt, args):
-        ctxt = self.serializer.deserialize_context(ctxt)
-        new_args = dict()
-        for argname, arg in six.iteritems(args):
-            new_args[argname] = self.serializer.deserialize_entity(ctxt, arg)
-        result = getattr(endpoint, method)(ctxt, **new_args)
-        return self.serializer.serialize_entity(ctxt, result)
-
-    @contextlib.contextmanager
-    def __call__(self, incoming):
-        incoming.acknowledge()
-        yield lambda: self._dispatch_and_reply(incoming)
-
-    def _dispatch_and_reply(self, incoming):
-        try:
-            incoming.reply(self._dispatch(incoming.ctxt,
-                                          incoming.message))
-        except ExpectedException as e:
-            LOG.debug(u&#39;Expected exception during message handling (%s)&#39;,
-                      e.exc_info[1])
-            incoming.reply(failure=e.exc_info, log_failure=False)
-        except Exception as e:
-            # sys.exc_info() is deleted by LOG.exception().
-            exc_info = sys.exc_info()
-            LOG.error(_(&#39;Exception during message handling: %s&#39;), e,
-                      exc_info=exc_info)
-            incoming.reply(failure=exc_info)
-            # NOTE(dhellmann): Remove circular object reference
-            # between the current stack frame and the traceback in
-            # exc_info.
-            del exc_info
-
-    def _dispatch(self, ctxt, message):
-        &quot;&quot;&quot;Dispatch an RPC message to the appropriate endpoint method.
-
-        :param ctxt: the request context
-        :type ctxt: dict
-        :param message: the message payload
-        :type message: dict
-        :raises: NoSuchMethod, UnsupportedVersion
-        &quot;&quot;&quot;
-        method = message.get(&#39;method&#39;)
-        args = message.get(&#39;args&#39;, {})
-        namespace = message.get(&#39;namespace&#39;)
-        version = message.get(&#39;version&#39;, &#39;1.0&#39;)
-
-        found_compatible = False
-        for endpoint in self.endpoints:
-            target = getattr(endpoint, &#39;target&#39;, None)
-            if not target:
-                target = self._default_target
-
-            if not (self._is_namespace(target, namespace) and
-                    self._is_compatible(target, version)):
-                continue
-
-            if hasattr(endpoint, method): #从endpoint中获取相应的rpc method
-                localcontext.set_local_context(ctxt) #执行rpc调用
-                try:
-                    return self._do_dispatch(endpoint, method, ctxt, args) #返回序列化的结果
-                finally:
-                    localcontext.clear_local_context()
-
-            found_compatible = True
-
-        if found_compatible:
-            raise NoSuchMethod(method)
-        else:
-            raise UnsupportedVersion(version, method=method)
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;pre&gt;&lt;code&gt;
-在\_\_call\_\_方法中, 返回的[lambda][2]即为: self._dispatch_and_reply(incoming), 然后消息会在\_dispatch函数中被处理并返回相应的
-rpc调用的结果.
-
-#### Transport如何通过Target获取相应的消息
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;pre&gt;&lt;code&gt;    def _listen(self, transport):
-        return transport._listen(self._target)
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;pre&gt;&lt;code&gt;
-在上面dispatcher的实现中, 可以看到_listen函数是通过tranport.\_listen实现的, 并相应的传递了self._target作为参数.
-因此, 我们可以通过理解Transport的实现来理解openstack neutron中topic的含义.
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;pre&gt;&lt;code&gt;class Transport(object):
-    &quot;&quot;&quot;A messaging transport.
-    This is a mostly opaque handle for an underlying messaging transport
-    driver.
-    It has a single &#39;conf&#39; property which is the cfg.ConfigOpts instance used
-    to construct the transport object.
-    &quot;&quot;&quot;
-    def __init__(self, driver):
-        self.conf = driver.conf
-        self._driver = driver
-
-    def _send(self, target, ctxt, message, wait_for_reply=None, timeout=None,
-              retry=None):
-        if not target.topic:
-            raise exceptions.InvalidTarget(&#39;A topic is required to send&#39;,
-                                           target)
-        return self._driver.send(target, ctxt, message,
-                                 wait_for_reply=wait_for_reply,
-                                 timeout=timeout, retry=retry)
-
-    def _send_notification(self, target, ctxt, message, version, retry=None):
-        if not target.topic:
-            raise exceptions.InvalidTarget(&#39;A topic is required to send&#39;,
-                                           target)
-        self._driver.send_notification(target, ctxt, message, version,
-                                       retry=retry)
-
-    def _listen(self, target):
-        if not (target.topic and target.server):
-            raise exceptions.InvalidTarget(&#39;A server\&#39;s target must have &#39;
-                                           &#39;topic and server names specified&#39;,
-                                           target)
-        return self._driver.listen(target) #相应的实现在driver中实现
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;pre&gt;&lt;code&gt;
-可以看到, 不同的transport都实现了listen函数, 以rabbitmq的实现为例, driver代码如下:
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;pre&gt;&lt;code&gt;class AMQPDriverBase(base.BaseDriver):
-
-    def __init__(self, conf, url, connection_pool,
-                 default_exchange=None, allowed_remote_exmods=None):
-        super(AMQPDriverBase, self).__init__(conf, url, default_exchange,
-                                             allowed_remote_exmods)
-
-        self._default_exchange = default_exchange
-
-        self._connection_pool = connection_pool
-
-        self._reply_q_lock = threading.Lock()
-        self._reply_q = None
-        self._reply_q_conn = None
-        self._waiter = None
-
-    def _get_exchange(self, target):
-        return target.exchange or self._default_exchange
-
-    def _get_connection(self, pooled=True):
-        return rpc_amqp.ConnectionContext(self._connection_pool,
-                                          pooled=pooled)
-
-    def _get_reply_q(self):
-        with self._reply_q_lock:
-            if self._reply_q is not None:
-                return self._reply_q
-
-            reply_q = &#39;reply_&#39; + uuid.uuid4().hex
-
-            conn = self._get_connection(pooled=False)
-
-            self._waiter = ReplyWaiter(self.conf, reply_q, conn,
-                                       self._allowed_remote_exmods)
-
-            self._reply_q = reply_q
-            self._reply_q_conn = conn
-
-        return self._reply_q
-
-    def _send(self, target, ctxt, message,
-              wait_for_reply=None, timeout=None,
-              envelope=True, notify=False, retry=None):
-
-        # FIXME(markmc): remove this temporary hack
-        class Context(object):
-            def __init__(self, d):
-                self.d = d
-
-            def to_dict(self):
-                return self.d
-
-        context = Context(ctxt)
-        msg = message
-
-        if wait_for_reply:
-            msg_id = uuid.uuid4().hex
-            msg.update({&#39;_msg_id&#39;: msg_id})
-            LOG.debug(&#39;MSG_ID is %s&#39;, msg_id)
-            msg.update({&#39;_reply_q&#39;: self._get_reply_q()})
-
-        rpc_amqp._add_unique_id(msg)
-        rpc_amqp.pack_context(msg, context)
-
-        if envelope:
-            msg = rpc_common.serialize_msg(msg)
-
-        if wait_for_reply:
-            self._waiter.listen(msg_id)
-
-        try:
-            with self._get_connection() as conn:
-                if notify:
-                    conn.notify_send(self._get_exchange(target),
-                                     target.topic, msg, retry=retry)
-                elif target.fanout:
-                    conn.fanout_send(target.topic, msg, retry=retry)
-                else:
-                    topic = target.topic
-                    if target.server:
-                        topic = &#39;%s.%s&#39; % (target.topic, target.server)
-                    conn.topic_send(exchange_name=self._get_exchange(target),
-                                    topic=topic, msg=msg, timeout=timeout,
-                                    retry=retry)
-
-            if wait_for_reply:
-                result = self._waiter.wait(msg_id, timeout)
-                if isinstance(result, Exception):
-                    raise result
-                return result
-        finally:
-            if wait_for_reply:
-                self._waiter.unlisten(msg_id)
-
-    def send(self, target, ctxt, message, wait_for_reply=None, timeout=None,
-             retry=None):
-        return self._send(target, ctxt, message, wait_for_reply, timeout,
-                          retry=retry)
-
-    def send_notification(self, target, ctxt, message, version, retry=None):
-        return self._send(target, ctxt, message,
-                          envelope=(version == 2.0), notify=True, retry=retry)
-
-    def listen(self, target):
-        conn = self._get_connection(pooled=False)
-
-        listener = AMQPListener(self, conn)
-
-        conn.declare_topic_consumer(exchange_name=self._get_exchange(target), #定义Topic Consumer
-                                    topic=target.topic,
-                                    callback=listener)
-        conn.declare_topic_consumer(exchange_name=self._get_exchange(target),
-                                    topic=&#39;%s.%s&#39; % (target.topic,
-                                                     target.server),
-                                    callback=listener)
-        conn.declare_fanout_consumer(target.topic, listener)
-
-        return listener
-
-    def listen_for_notifications(self, targets_and_priorities, pool):
-        conn = self._get_connection(pooled=False)
-
-        listener = AMQPListener(self, conn)
-        for target, priority in targets_and_priorities:
-            conn.declare_topic_consumer(
-                exchange_name=self._get_exchange(target),
-                topic=&#39;%s.%s&#39; % (target.topic, priority),
-                callback=listener, queue_name=pool)
-        return listener
-&lt;/code&gt;&lt;/pre&gt;
-
-&lt;p&gt;~~~&lt;/p&gt;
-
-&lt;p&gt;从上面listen的代码, 就回到了rpc call和rpc cast模型, 定义Topic Consumer, 但是为什么会初始化3个&lt;code&gt;Consumer&lt;/code&gt;呢？&lt;/p&gt;
-
-&lt;p&gt;这要从rpc方法调用的方式说起, rpc call和 rpc cast有两种方式: topic + topic.host, rpc fanout_cast有一种方式: fanout, 所以对应的&lt;code&gt;Consumer&lt;/code&gt;
-也有3种, 因为在消息的接收方看来, 我不需要关心消息是以什么方式传输过来的, 无论是rpc call, 或者rpc cast, 或rpc fanout_cast, 对于
-消息本身才是它需要关心的, 因此它可以接收三种方式发送过来的消息, 所以会初始化3种&lt;code&gt;Consumer&lt;/code&gt;.&lt;/p&gt;
-
-&lt;h3&gt;总结&lt;/h3&gt;
-
-&lt;p&gt;结合RabbbitMQ的基本概念, 不难看出, openstack中与rpc调用相关的topic, 对消息发送方(rpc调用方)来说, 它就是
-消息的&lt;code&gt;Routing Key&lt;/code&gt;, 对于消息接收方(rpc接受方), 它就是初始化&lt;code&gt;Consumer&lt;/code&gt;时用于接受消息的&lt;code&gt;Queue&lt;/code&gt;的名称,
-且&lt;code&gt;Queue&lt;/code&gt;与&lt;code&gt;Exchange&lt;/code&gt;的Binding Key也为它.&lt;/p&gt;
-
-&lt;h3&gt;参考网站&lt;/h3&gt;
-
-&lt;p&gt;RabbitMQ:   &lt;a href=&quot;http://www.rabbitmq.com/&quot;&gt;http://www.rabbitmq.com/&lt;/a&gt;&lt;/p&gt;
 </content>
  </entry>
  
