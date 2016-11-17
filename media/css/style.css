@@ -20,7 +20,7 @@ body {
   font-size: 14px;
   font-family: telexregular, Hiragino Sans GB, Microsoft YaHei, sans-serif;
   color: #555;
-  background-color: #f9f9f9;
+  background-color: #FBFAF7;
   -webkit-font-smoothing: antialiased; }
 
 ol, ul {
@@ -137,7 +137,7 @@ ul.listing {
     ul.listing li.listing-item time {
       color: #999; }
     ul.listing li.listing-item:hover {
-      background-color: #f9f9f9; }
+      background-color: #FBFAF7; }
     ul.listing li.listing-seperator {
       font-family: telexregular, Hiragino Sans GB, Microsoft YaHei, sans-serif; }
       ul.listing li.listing-seperator:before {
